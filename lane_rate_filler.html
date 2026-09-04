@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lane Rate Filler</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --navy:#1F3864; --navy-deep:#122240; --slate:#3D5A80; --paper:#F4F6F8;
+    --ink:#1A2233; --ink-soft:#5B6B82; --line:#D7DEE7;
+    --ok:#1E7B4D; --ok-bg:#E3F5EB; --warn:#B4790A; --warn-bg:#FCF1DD;
+    --bad:#B3261E; --bad-bg:#FBE8E7; --amber-rail:#E8A33D;
+    --mono:'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+    --sans:'IBM Plex Sans','Segoe UI',Arial,sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); -webkit-font-smoothing:antialiased;}
+  .rail{height:6px; background:linear-gradient(90deg,var(--navy),var(--slate) 60%,var(--amber-rail));}
+  header{background:var(--navy); color:#fff; padding:20px 32px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+  header h1{margin:0; font-size:20px; font-weight:700;}
+  header .eyebrow{font-family:var(--mono); font-size:11px; color:#8CA3C8; text-transform:uppercase; letter-spacing:1.2px; margin-bottom:3px;}
+  main{max-width:900px; margin:0 auto; padding:28px 24px 60px;}
+
+  .panel{background:#fff; border:1px solid var(--line); border-radius:8px; padding:24px 26px; margin-bottom:20px;}
+  .panel h2{font-size:16px; margin:0 0 4px;}
+  .panel .sub{font-size:12.5px; color:var(--ink-soft); margin:0 0 18px;}
+
+  .drop{
+    border:1.5px dashed var(--line); border-radius:6px; padding:34px 16px; text-align:center;
+    color:var(--ink-soft); font-size:13px; cursor:pointer; background:#FBFCFD; transition:.15s;
+  }
+  .drop:hover{border-color:var(--slate); background:#F1F5FA;}
+  .drop.drag{border-color:var(--navy); background:#EAF0F8;}
+  .drop input{display:none;}
+  .drop .icon{font-size:26px; display:block; margin-bottom:8px;}
+
+  .row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px;}
+  .field{display:flex; flex-direction:column; gap:4px; min-width:170px;}
+  .field label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; font-weight:600;}
+  .field.grow{flex:1;}
+  select, input[type=text], input[type=number]{
+    font-family:var(--mono); font-size:12.5px; padding:8px 10px; border:1px solid var(--line); border-radius:4px;
+    background:#fff; color:var(--ink); width:100%;
+  }
+  select:focus, input:focus{outline:2px solid var(--slate); outline-offset:1px;}
+  .checkgrid{display:flex; flex-wrap:wrap; gap:8px 16px; margin:6px 0 0;}
+  .checkgrid label{display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:12px; color:var(--ink); font-weight:normal; text-transform:none; letter-spacing:0;}
+
+  .target-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:16px 0;}
+  .target-box{border:1.5px solid var(--line); border-radius:6px; padding:14px; background:#FBFCFD;}
+  .target-box .t-label{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--slate); font-weight:700; margin-bottom:8px;}
+
+  button.primary{
+    font-family:var(--sans); font-weight:700; font-size:13.5px; color:#fff; background:var(--navy);
+    border:none; padding:11px 24px; border-radius:5px; cursor:pointer;
+  }
+  button.primary:hover{background:var(--navy-deep);}
+  button.primary:disabled{background:#B7C1D1; cursor:not-allowed;}
+  button.ghost{
+    font-family:var(--sans); font-weight:600; font-size:12.5px; color:var(--slate); background:#fff;
+    border:1px solid var(--line); padding:10px 18px; border-radius:5px; cursor:pointer;
+  }
+  button.ghost:hover{background:#F1F5FA;}
+  button.big-nav{
+    font-family:var(--sans); font-weight:700; font-size:15px; padding:14px 30px; border-radius:6px; cursor:pointer; border:none;
+  }
+  button.big-nav.next{background:var(--navy); color:#fff;}
+  button.big-nav.next:hover{background:var(--navy-deep);}
+  button.big-nav.prev{background:#fff; color:var(--ink-soft); border:1px solid var(--line);}
+  button.big-nav.prev:hover{background:#F1F5FA;}
+  button.big-nav:disabled{background:#D7DEE7; color:#9AA7B8; cursor:not-allowed;}
+
+  .status-msg{font-size:12px; color:var(--ink-soft); margin-top:10px;}
+  .status-msg.err{color:var(--bad);}
+  .status-msg.ok{color:var(--ok);}
+
+  /* wizard */
+  .progress-strip{display:flex; align-items:center; gap:10px; margin-bottom:18px;}
+  .progress-bar{flex:1; height:8px; background:var(--line); border-radius:4px; overflow:hidden;}
+  .progress-bar .fill{height:100%; background:var(--ok); transition:.2s;}
+  .progress-count{font-family:var(--mono); font-size:12px; color:var(--ink-soft); white-space:nowrap;}
+
+  .jump-strip{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:22px;}
+  .jump-dot{
+    width:26px; height:26px; border-radius:5px; border:1px solid var(--line); background:#fff;
+    font-family:var(--mono); font-size:10px; color:var(--ink-soft); display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .jump-dot.filled{background:var(--ok-bg); color:var(--ok); border-color:var(--ok);}
+  .jump-dot.current{outline:2px solid var(--navy); outline-offset:1px;}
+
+  .route-card{
+    background:linear-gradient(135deg,#F4F7FB,#EAF0F8); border:1px solid var(--line); border-radius:10px;
+    padding:30px 34px; margin-bottom:24px;
+  }
+  .route-card .lane-tag{font-family:var(--mono); font-size:11.5px; color:var(--slate); text-transform:uppercase; letter-spacing:.6px; font-weight:700; margin-bottom:16px;}
+  .route-line{display:flex; align-items:center; gap:18px; margin-bottom:26px;}
+  .route-point{font-size:19px; font-weight:700; color:var(--navy); line-height:1.25;}
+  .route-point .sub-line{display:block; font-size:12px; font-weight:500; color:var(--ink-soft); margin-top:2px;}
+  .route-arrow{flex:1; height:2px; background:var(--slate); position:relative; min-width:50px;}
+  .route-arrow::after{content:'▶'; position:absolute; right:-4px; top:-9px; color:var(--slate); font-size:14px;}
+  .context-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:18px 28px; padding-top:18px; border-top:1px solid rgba(61,90,128,.18);}
+  .ctx-item .ctx-label{font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-soft); margin-bottom:4px;}
+  .ctx-item .ctx-value{font-size:14.5px; font-weight:600; color:var(--ink); line-height:1.35;}
+  .ctx-item .ctx-value.dim{font-weight:500; color:var(--ink-soft);}
+
+  .fill-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px;}
+  .fill-box label{display:block; font-size:11.5px; font-weight:700; color:var(--ink); margin-bottom:6px;}
+  .fill-box input{font-size:15px; padding:12px; text-align:left;}
+  .quick-cur{display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;}
+  .quick-cur button{
+    font-family:var(--mono); font-size:11px; padding:4px 10px; border-radius:3px; border:1px solid var(--line);
+    background:#fff; color:var(--ink-soft); cursor:pointer;
+  }
+  .quick-cur button.sel{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .quick-cur button#fl-cur-all{color:var(--slate); border-color:var(--slate); font-weight:600;}
+  .quick-cur button#fl-cur-all:hover{background:var(--slate); color:#fff;}
+
+  .nav-row{display:flex; align-items:center; justify-content:space-between; margin-top:8px;}
+  .nav-row .spacer{flex:1;}
+
+  footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft); font-family:var(--mono);}
+  .hidden{display:none;}
+</style>
+</head>
+<body>
+<div class="rail"></div>
+<header>
+  <div>
+    <div class="eyebrow">STS Pricing</div>
+    <h1>Lane Rate Filler</h1>
+  </div>
+</header>
+
+<main>
+  <div id="app"></div>
+</main>
+<footer>runs entirely on this computer — the file never leaves your browser</footer>
+
+<script>
+const S = {
+  screen: 'upload', // upload | config | wizard
+  wb: null, sheetNames: [], sheetName: null, ws: null,
+  aoa: [], headerRow: 1, columns: [], dataRows: [], // dataRows: [{sheetRow, cells}]
+  rangeStartRow: 0, rangeStartCol: 0,
+  laneCol: null, contextCols: [],
+  rateCol: null, currencyCol: null, capacityCol: null,
+  lanes: [], // [{sheetRow, laneId, context:[{label,value}], rate,currency,capacity}]
+  current: 0,
+  originalFileName: '',
+  originalArrayBuffer: null
+};
+
+function escHtml(s){return String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function colLetter(idx){ return XLSX.utils.encode_col(idx); }
+
+function render(){
+  const app = document.getElementById('app');
+  if(S.screen==='upload') app.innerHTML = uploadHTML();
+  else if(S.screen==='config') app.innerHTML = configHTML();
+  else app.innerHTML = wizardHTML();
+  wireEvents();
+}
+
+// ---------------- UPLOAD ----------------
+function uploadHTML(){
+  return `
+    <div class="panel">
+      <h2>Upload the workbook you were sent</h2>
+      <p class="sub">Drop the RFP file here. You'll pick the sheet and the lane details next.</p>
+      <div class="drop" id="up-drop">
+        <span class="icon">📄</span>Drop the .xlsx file here, or click to browse
+        <input type="file" id="up-input" accept=".xlsx,.xls">
+      </div>
+      <div id="up-status" class="status-msg"></div>
+    </div>
+  `;
+}
+
+function wireUpload(){
+  const drop = document.getElementById('up-drop');
+  const input = document.getElementById('up-input');
+  if(!drop) return;
+  drop.addEventListener('click', ()=>input.click());
+  input.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+  drop.addEventListener('dragover', e=>{e.preventDefault(); drop.classList.add('drag');});
+  drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop', e=>{
+    e.preventDefault(); drop.classList.remove('drag');
+    const f = e.dataTransfer.files[0];
+    if(f && /\.xlsx?$/i.test(f.name)) handleFile(f);
+  });
+}
+
+function handleFile(file){
+  const statusEl = document.getElementById('up-status');
+  statusEl.textContent = 'Reading file…'; statusEl.className='status-msg';
+  S.originalFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      S.originalArrayBuffer = e.target.result.slice(0); // keep pristine copy for surgical writing later
+      const wb = XLSX.read(e.target.result, {type:'array', cellStyles:true});
+      S.wb = wb;
+      S.sheetNames = wb.SheetNames;
+      const defaultSheet = wb.SheetNames.includes('Lane Set') ? 'Lane Set' : (wb.SheetNames.find(n=>/bid|lane/i.test(n)) || wb.SheetNames[0]);
+      selectSheet(defaultSheet);
+      S.screen = 'config';
+      render();
+    } catch(err){
+      statusEl.textContent = 'Could not read that file — is it a valid .xlsx?'; statusEl.className='status-msg err';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function selectSheet(name){
+  S.sheetName = name;
+  S.ws = S.wb.Sheets[name];
+  S.aoa = XLSX.utils.sheet_to_json(S.ws, {header:1, defval:null, raw:true});
+  const range = XLSX.utils.decode_range(S.ws['!ref'] || 'A1');
+  S.rangeStartRow = range.s.r;
+  S.rangeStartCol = range.s.c;
+  S.headerRow = 1;
+  rebuildColumns();
+}
+
+function rebuildColumns(){
+  const headerArr = S.aoa[S.headerRow-1] || [];
+  let maxCols = headerArr.length;
+  S.aoa.forEach(r=>{ if(r && r.length>maxCols) maxCols = r.length; });
+  const colsMeta = (S.ws['!cols']) || [];
+  const columns = [];
+  for(let i=0;i<maxCols;i++){
+    const raw = headerArr[i];
+    const name = (raw===undefined||raw===null||String(raw).trim()==='') ? null : String(raw).trim();
+    const absCol = S.rangeStartCol + i;
+    const hidden = !!(colsMeta[absCol] && (colsMeta[absCol].hidden || colsMeta[absCol].width===0));
+    columns.push({idx:i, letter:colLetter(absCol), name, hidden, label: name ? `${colLetter(absCol)}: ${name}` : `${colLetter(absCol)} (blank header)`});
+  }
+  S.columns = columns;
+  S.dataRows = [];
+  for(let r=S.headerRow; r<S.aoa.length; r++){
+    const cells = S.aoa[r];
+    if(cells && cells.some(c=>c!==null && c!==undefined && String(c).trim()!=='')){
+      S.dataRows.push({sheetRow:S.rangeStartRow + r, cells});
+    }
+  }
+  const guess = (exactCandidates, substrPatterns)=>{
+    for(const e of exactCandidates){
+      const col = columns.find(c=>c.name && c.name.trim().toLowerCase()===e);
+      if(col) return col.idx;
+    }
+    for(const p of (substrPatterns||exactCandidates)){
+      const col = columns.find(c=>c.name && c.name.toLowerCase().includes(p));
+      if(col) return col.idx;
+    }
+    return null;
+  };
+  if(S.laneCol===null || !columns.find(c=>c.idx===S.laneCol)) S.laneCol = guess(['lane id','route id'],['route id','lane id','lane']) ?? (columns[0]?columns[0].idx:null);
+  if(S.rateCol===null || !columns.find(c=>c.idx===S.rateCol)) S.rateCol = guess(['all in rate (usd)','all in rate','all-in rate'],['all in rate','all-in rate']);
+  if(S.currencyCol===null || !columns.find(c=>c.idx===S.currencyCol)) S.currencyCol = guess(['currency']);
+  if(S.capacityCol===null || !columns.find(c=>c.idx===S.capacityCol)) S.capacityCol = guess(['capacity']);
+  // default context = every non-hidden column, minus lane id and the three fill targets
+  const skip = new Set([S.laneCol, S.rateCol, S.currencyCol, S.capacityCol].filter(v=>v!==null));
+  S.contextCols = columns.filter(c=> !c.hidden && !skip.has(c.idx)).map(c=>c.idx);
+}
+
+// ---------------- CONFIG ----------------
+function fieldSelect(id, label, columns, selectedIdx, allowBlank){
+  const opts = (allowBlank ? [`<option value="">— none —</option>`] : []).concat(
+    columns.map(c=>`<option value="${c.idx}" ${c.idx===selectedIdx?'selected':''}>${escHtml(c.label)}</option>`)
+  ).join('');
+  return `<div class="field"><label>${label}</label><select id="${id}">${opts}</select></div>`;
+}
+
+function configHTML(){
+  return `
+    <div class="panel">
+      <h2>${escHtml(S.originalFileName)}</h2>
+      <p class="sub">Pick the sheet and tell us which columns to use. ${S.dataRows.length} lane rows found.</p>
+      <div class="row">
+        <div class="field"><label>Sheet</label><select id="cf-sheet">${S.sheetNames.map(n=>`<option value="${escHtml(n)}" ${n===S.sheetName?'selected':''}>${escHtml(n)}</option>`).join('')}</select></div>
+        <div class="field"><label>Header row</label><input type="number" min="1" id="cf-hdr" value="${S.headerRow}"></div>
+        ${fieldSelect('cf-lane','Lane ID column', S.columns, S.laneCol, false)}
+      </div>
+      <div class="field" style="margin-bottom:18px;">
+        <label>Show these columns for context (unchecked = hidden in this Excel file)</label>
+        <div class="checkgrid">
+          ${S.columns.map(c=>`<label style="${c.hidden?'color:var(--ink-soft);':''}"><input type="checkbox" data-ctx="${c.idx}" ${S.contextCols.includes(c.idx)?'checked':''}> ${escHtml(c.label)}${c.hidden?' <span style="opacity:.7;">(hidden)</span>':''}</label>`).join('')}
+        </div>
+      </div>
+
+      <p class="sub" style="margin-bottom:6px;"><strong>Which columns should get filled in?</strong> Pick the ones already set up in this file.</p>
+      <div class="target-grid">
+        <div class="target-box"><div class="t-label">All-in rate</div>${fieldSelect('cf-rate','', S.columns, S.rateCol, true)}</div>
+        <div class="target-box"><div class="t-label">Currency</div>${fieldSelect('cf-currency','', S.columns, S.currencyCol, true)}</div>
+        <div class="target-box"><div class="t-label">Capacity</div>${fieldSelect('cf-capacity','', S.columns, S.capacityCol, true)}</div>
+      </div>
+
+      <div class="row">
+        <button class="primary" id="cf-start" ${(S.rateCol===null && S.currencyCol===null && S.capacityCol===null)?'disabled':''}>Start filling lanes</button>
+        <button class="ghost" id="cf-back">Upload a different file</button>
+      </div>
+      <div id="cf-status" class="status-msg"></div>
+    </div>
+  `;
+}
+
+function wireConfig(){
+  const sheetSel = document.getElementById('cf-sheet');
+  if(!sheetSel) return;
+  sheetSel.addEventListener('change', e=>{ selectSheet(e.target.value); render(); });
+  document.getElementById('cf-hdr').addEventListener('change', e=>{
+    S.headerRow = Math.max(1, parseInt(e.target.value)||1);
+    rebuildColumns(); render();
+  });
+  document.getElementById('cf-lane').addEventListener('change', e=> S.laneCol = parseInt(e.target.value));
+  document.querySelectorAll('[data-ctx]').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      const idx = parseInt(e.target.dataset.ctx);
+      if(e.target.checked){ if(!S.contextCols.includes(idx)) S.contextCols.push(idx); }
+      else S.contextCols = S.contextCols.filter(i=>i!==idx);
+    });
+  });
+  document.getElementById('cf-rate').addEventListener('change', e=> S.rateCol = e.target.value===''?null:parseInt(e.target.value));
+  document.getElementById('cf-currency').addEventListener('change', e=> S.currencyCol = e.target.value===''?null:parseInt(e.target.value));
+  document.getElementById('cf-capacity').addEventListener('change', e=> S.capacityCol = e.target.value===''?null:parseInt(e.target.value));
+  document.getElementById('cf-start').addEventListener('click', startWizard);
+  document.getElementById('cf-back').addEventListener('click', ()=>{ S.screen='upload'; render(); });
+}
+
+function startWizard(){
+  S.lanes = S.dataRows.map(row=>{
+    const laneId = row.cells[S.laneCol];
+    const context = S.contextCols.map(idx=>({
+      label: (S.columns.find(c=>c.idx===idx)||{}).name || colLetter(idx),
+      value: row.cells[idx]
+    }));
+    return {
+      sheetRow: row.sheetRow,
+      laneId: laneId==null?'':String(laneId),
+      context,
+      rate: S.rateCol!==null ? row.cells[S.rateCol] : null,
+      currency: S.currencyCol!==null ? row.cells[S.currencyCol] : null,
+      capacity: S.capacityCol!==null ? row.cells[S.capacityCol] : null
+    };
+  }).filter(l=>l.laneId!=='');
+  S.current = 0;
+  S.screen = 'wizard';
+  render();
+}
+
+// ---------------- WIZARD ----------------
+function laneIsFilled(l){
+  const needsRate = S.rateCol!==null, needsCur = S.currencyCol!==null, needsCap = S.capacityCol!==null;
+  if(needsRate && (l.rate===null || l.rate===undefined || l.rate==='')) return false;
+  if(needsCur && (l.currency===null || l.currency===undefined || l.currency==='')) return false;
+  if(needsCap && (l.capacity===null || l.capacity===undefined || l.capacity==='')) return false;
+  return true;
+}
+
+function wizardHTML(){
+  const total = S.lanes.length;
+  const filledCount = S.lanes.filter(laneIsFilled).length;
+  const l = S.lanes[S.current];
+  if(!l) return `<div class="panel"><p class="sub">No lanes to show.</p></div>`;
+
+  const originCtx = l.context.find(c=>/origin/i.test(c.label));
+  const destCtx = l.context.find(c=>/destination/i.test(c.label));
+  const hasVal = v => v!==null && v!==undefined && String(v).trim()!=='';
+  const otherCtx = l.context.filter(c=>c!==originCtx && c!==destCtx);
+
+  return `
+    <div class="panel">
+      <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+        <div><strong>${escHtml(S.originalFileName)}</strong></div>
+        <button class="ghost" id="wz-remap">Change columns</button>
+      </div>
+      <div class="progress-strip">
+        <div class="progress-bar"><div class="fill" style="width:${total?Math.round(filledCount/total*100):0}%"></div></div>
+        <div class="progress-count">${filledCount}/${total} filled</div>
+      </div>
+      <div class="jump-strip">
+        ${S.lanes.map((lane,i)=>`<div class="jump-dot ${laneIsFilled(lane)?'filled':''} ${i===S.current?'current':''}" data-jump="${i}" title="Lane ${escHtml(lane.laneId)}">${i+1}</div>`).join('')}
+      </div>
+
+      <div class="route-card">
+        <div class="lane-tag">Lane ${S.current+1} of ${total} — ID ${escHtml(l.laneId)}</div>
+        ${hasVal(originCtx&&originCtx.value) || hasVal(destCtx&&destCtx.value) ? `
+          <div class="route-line">
+            <div class="route-point">${escHtml(hasVal(originCtx&&originCtx.value)?originCtx.value:'—')}</div>
+            <div class="route-arrow"></div>
+            <div class="route-point">${escHtml(hasVal(destCtx&&destCtx.value)?destCtx.value:'—')}</div>
+          </div>` : ''}
+        ${otherCtx.length ? `
+          <div class="context-grid">
+            ${otherCtx.map(c=>`<div class="ctx-item"><div class="ctx-label">${escHtml(c.label)}</div><div class="ctx-value ${hasVal(c.value)?'':'dim'}">${hasVal(c.value)?escHtml(c.value):'—'}</div></div>`).join('')}
+          </div>` : ''}
+      </div>
+
+      <div class="fill-grid">
+        ${S.rateCol!==null ? `
+          <div class="fill-box">
+            <label>All-in rate</label>
+            <input type="number" step="0.01" id="fl-rate" value="${l.rate!=null?l.rate:''}" placeholder="0.00">
+          </div>` : ''}
+        ${S.currencyCol!==null ? `
+          <div class="fill-box">
+            <label>Currency</label>
+            <input type="text" id="fl-currency" value="${escHtml(l.currency||'')}" placeholder="USD">
+            <div class="quick-cur">
+              ${['USD','CAD','MXN'].map(c=>`<button type="button" data-setcur="${c}" class="${l.currency===c?'sel':''}">${c}</button>`).join('')}
+              <button type="button" id="fl-cur-all" title="Set this currency for every lane">Apply to all lanes</button>
+            </div>
+          </div>` : ''}
+        ${S.capacityCol!==null ? `
+          <div class="fill-box">
+            <label>Capacity</label>
+            <input type="text" id="fl-capacity" value="${escHtml(l.capacity!=null?l.capacity:'')}" placeholder="e.g. 5">
+          </div>` : ''}
+      </div>
+
+      <div class="nav-row">
+        <button class="big-nav prev" id="wz-prev" ${S.current===0?'disabled':''}>← Previous</button>
+        <div class="spacer"></div>
+        <button class="big-nav next" id="wz-next" ${S.current===total-1?'disabled':''}>Next →</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Done filling?</h2>
+      <p class="sub">Download the completed workbook and send it back — everything else in the file stays exactly as it was.</p>
+      <button class="primary" id="wz-download">Download completed workbook</button>
+      <div id="wz-status" class="status-msg"></div>
+    </div>
+  `;
+}
+
+function wireWizard(){
+  const prevBtn = document.getElementById('wz-prev');
+  if(!prevBtn) return;
+  prevBtn.addEventListener('click', ()=>{ saveCurrentInputs(); if(S.current>0){ S.current--; render(); }});
+  document.getElementById('wz-next').addEventListener('click', ()=>{ saveCurrentInputs(); if(S.current<S.lanes.length-1){ S.current++; render(); }});
+  document.querySelectorAll('[data-jump]').forEach(el=>{
+    el.addEventListener('click', ()=>{ saveCurrentInputs(); S.current = parseInt(el.dataset.jump); render(); });
+  });
+  document.querySelectorAll('[data-setcur]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const curInput = document.getElementById('fl-currency');
+      curInput.value = el.dataset.setcur;
+      saveCurrentInputs(); render();
+    });
+  });
+  const applyAllBtn = document.getElementById('fl-cur-all');
+  if(applyAllBtn) applyAllBtn.addEventListener('click', ()=>{
+    saveCurrentInputs();
+    const val = S.lanes[S.current].currency;
+    if(!val) return;
+    S.lanes.forEach(l=> l.currency = val);
+    render();
+  });
+  document.getElementById('wz-remap').addEventListener('click', ()=>{ saveCurrentInputs(); S.screen='config'; render(); });
+  document.getElementById('wz-download').addEventListener('click', ()=>{ saveCurrentInputs(); downloadCompleted(); });
+}
+
+function saveCurrentInputs(){
+  const l = S.lanes[S.current];
+  if(!l) return;
+  const rateEl = document.getElementById('fl-rate');
+  const curEl = document.getElementById('fl-currency');
+  const capEl = document.getElementById('fl-capacity');
+  if(rateEl) l.rate = rateEl.value===''?null:parseFloat(rateEl.value);
+  if(curEl) l.currency = curEl.value.trim()===''?null:curEl.value.trim().toUpperCase();
+  if(capEl) l.capacity = capEl.value.trim()===''?null:capEl.value.trim();
+}
+
+// ---- surgical xlsx patching (preserves styles, external links, everything untouched) ----
+
+async function getSheetXmlPath(zip, sheetName){
+  const wbXml = await zip.file('xl/workbook.xml').async('string');
+  const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+  const parser = new DOMParser();
+  const wbDoc = parser.parseFromString(wbXml, 'application/xml');
+  const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+  const sheetEls = Array.from(wbDoc.getElementsByTagName('sheet'));
+  const sheetEl = sheetEls.find(el => el.getAttribute('name') === sheetName);
+  if(!sheetEl) throw new Error('Sheet not found in workbook.xml: '+sheetName);
+  const rId = sheetEl.getAttribute('r:id') || sheetEl.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+
+  const relEls = Array.from(relsDoc.getElementsByTagName('Relationship'));
+  const relEl = relEls.find(el => el.getAttribute('Id') === rId);
+  if(!relEl) throw new Error('Relationship not found for '+rId);
+  let target = relEl.getAttribute('Target');
+  if(target.startsWith('/')) target = target.slice(1);
+  else target = 'xl/' + target;
+  return target;
+}
+
+function colIndexFromRef(ref){
+  const m = ref.match(/^([A-Z]+)/);
+  let col = 0;
+  for(const ch of m[1]) col = col*26 + (ch.charCodeAt(0)-64);
+  return col-1; // 0-based
+}
+
+function findOrCreateRow(sheetDataEl, rowNum1based){
+  const rows = Array.from(sheetDataEl.getElementsByTagName('row'));
+  let existing = rows.find(r => parseInt(r.getAttribute('r'),10) === rowNum1based);
+  if(existing) return existing;
+  const doc = sheetDataEl.ownerDocument;
+  const ns = doc.documentElement.namespaceURI;
+  const newRow = doc.createElementNS(ns, 'row');
+  newRow.setAttribute('r', String(rowNum1based));
+  let inserted = false;
+  for(const r of rows){
+    if(parseInt(r.getAttribute('r'),10) > rowNum1based){
+      sheetDataEl.insertBefore(newRow, r);
+      inserted = true;
+      break;
+    }
+  }
+  if(!inserted) sheetDataEl.appendChild(newRow);
+  return newRow;
+}
+
+function findOrCreateCell(rowEl, cellRef, colIdx0based){
+  const cells = Array.from(rowEl.getElementsByTagName('c'));
+  let existing = cells.find(c => c.getAttribute('r') === cellRef);
+  if(existing) return existing;
+  const doc = rowEl.ownerDocument;
+  const ns = doc.documentElement.namespaceURI;
+  const newCell = doc.createElementNS(ns, 'c');
+  newCell.setAttribute('r', cellRef);
+  let inserted = false;
+  for(const c of cells){
+    if(colIndexFromRef(c.getAttribute('r')) > colIdx0based){
+      rowEl.insertBefore(newCell, c);
+      inserted = true;
+      break;
+    }
+  }
+  if(!inserted) rowEl.appendChild(newCell);
+  return newCell;
+}
+
+function clearCellChildren(cellEl){
+  while(cellEl.firstChild) cellEl.removeChild(cellEl.firstChild);
+}
+
+function setCellNumber(cellEl, value){
+  cellEl.removeAttribute('t');
+  clearCellChildren(cellEl);
+  const doc = cellEl.ownerDocument;
+  const ns = doc.documentElement.namespaceURI;
+  const v = doc.createElementNS(ns, 'v');
+  v.textContent = String(value);
+  cellEl.appendChild(v);
+}
+
+function setCellString(cellEl, value){
+  cellEl.setAttribute('t', 'inlineStr');
+  clearCellChildren(cellEl);
+  const doc = cellEl.ownerDocument;
+  const ns = doc.documentElement.namespaceURI;
+  const is = doc.createElementNS(ns, 'is');
+  const t = doc.createElementNS(ns, 't');
+  t.textContent = String(value);
+  is.appendChild(t);
+  cellEl.appendChild(is);
+}
+
+async function downloadCompleted(){
+  const statusEl = document.getElementById('wz-status');
+  statusEl.textContent = 'Generating file…'; statusEl.className='status-msg';
+  try{
+    const zip = await JSZip.loadAsync(S.originalArrayBuffer);
+    const sheetPath = await getSheetXmlPath(zip, S.sheetName);
+    const xmlText = await zip.file(sheetPath).async('string');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'application/xml');
+    const sheetDataEl = doc.getElementsByTagName('sheetData')[0];
+
+    S.lanes.forEach(l=>{
+      const rowNum1 = l.sheetRow + 1;
+      const targets = [];
+      if(S.rateCol!==null && l.rate!==null && l.rate!==undefined && l.rate!=='') targets.push({col:S.rangeStartCol+S.rateCol, kind:'num', val:Number(l.rate)});
+      if(S.currencyCol!==null && l.currency) targets.push({col:S.rangeStartCol+S.currencyCol, kind:'str', val:String(l.currency)});
+      if(S.capacityCol!==null && l.capacity!==null && l.capacity!==undefined && l.capacity!==''){
+        const num = parseFloat(l.capacity);
+        targets.push(isNaN(num) ? {col:S.rangeStartCol+S.capacityCol, kind:'str', val:String(l.capacity)} : {col:S.rangeStartCol+S.capacityCol, kind:'num', val:num});
+      }
+      if(!targets.length) return;
+      const rowEl = findOrCreateRow(sheetDataEl, rowNum1);
+      targets.forEach(t=>{
+        const ref = colLetter(t.col) + rowNum1;
+        const cellEl = findOrCreateCell(rowEl, ref, t.col);
+        if(t.kind==='num') setCellNumber(cellEl, t.val);
+        else setCellString(cellEl, t.val);
+      });
+    });
+
+    const serializer = new XMLSerializer();
+    const newXml = serializer.serializeToString(doc);
+    zip.file(sheetPath, newXml);
+
+    const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const outName = 'FILLED_' + S.originalFileName;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = outName;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    statusEl.textContent = 'Downloaded ' + outName; statusEl.className = 'status-msg ok';
+  } catch(err){
+    statusEl.textContent = 'Something went wrong generating the file.'; statusEl.className='status-msg err';
+    console.error(err);
+  }
+}
+
+function wireEvents(){
+  if(S.screen==='upload') wireUpload();
+  else if(S.screen==='config') wireConfig();
+  else wireWizard();
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lane Reconciliation Checker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --navy:#1F3864;
+    --navy-deep:#122240;
+    --slate:#3D5A80;
+    --paper:#F4F6F8;
+    --ink:#1A2233;
+    --ink-soft:#5B6B82;
+    --line:#D7DEE7;
+    --ok:#1E7B4D;
+    --ok-bg:#E3F5EB;
+    --warn:#B4790A;
+    --warn-bg:#FCF1DD;
+    --bad:#B3261E;
+    --bad-bg:#FBE8E7;
+    --amber-rail:#E8A33D;
+    --mono: 'IBM Plex Mono','SFMono-Regular',Consolas,monospace;
+    --sans: 'IBM Plex Sans','Segoe UI',Arial,sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  .rail{height:6px; background:linear-gradient(90deg,var(--navy),var(--slate) 60%,var(--amber-rail));}
+  header{
+    background:var(--navy); color:#fff; padding:22px 32px 20px;
+    display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  header h1{margin:0; font-size:20px; font-weight:700; letter-spacing:.2px;}
+  header .tag{font-family:var(--mono); font-size:11.5px; color:#B9C7DE; letter-spacing:.3px;}
+  header .eyebrow{font-family:var(--mono); font-size:11px; color:#8CA3C8; text-transform:uppercase; letter-spacing:1.2px; margin-bottom:3px;}
+  main{max-width:1180px; margin:0 auto; padding:26px 24px 60px;}
+
+  .stage{display:flex; align-items:center; gap:10px; margin:0 0 22px;}
+  .stage .node{
+    font-family:var(--mono); font-size:11.5px; padding:6px 12px; border-radius:3px;
+    background:#fff; border:1px solid var(--line); color:var(--ink-soft); white-space:nowrap;
+  }
+  .stage .node.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+  .stage .arrow{color:var(--ink-soft); font-size:14px;}
+
+  .panel{
+    background:#fff; border:1px solid var(--line); border-radius:6px; padding:20px 22px;
+    margin-bottom:20px;
+  }
+  .panel-title{
+    display:flex; align-items:center; gap:10px; margin:0 0 4px;
+  }
+  .panel-title .idx{
+    font-family:var(--mono); font-size:12px; font-weight:600; color:#fff; background:var(--slate);
+    width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .panel-title h2{font-size:15px; margin:0; font-weight:700;}
+  .panel-sub{font-size:12.5px; color:var(--ink-soft); margin:2px 0 16px 32px;}
+
+  .drop{
+    border:1.5px dashed var(--line); border-radius:5px; padding:16px; text-align:center;
+    color:var(--ink-soft); font-size:12.5px; cursor:pointer; transition:.15s; background:#FBFCFD;
+    margin-left:32px;
+  }
+  .drop:hover{border-color:var(--slate); background:#F1F5FA;}
+  .drop.drag{border-color:var(--navy); background:#EAF0F8;}
+  .drop input{display:none;}
+  .drop .icon{font-size:18px; display:block; margin-bottom:4px;}
+
+  .file-row{
+    display:flex; align-items:center; gap:10px; padding:10px 12px; margin:8px 0 0 32px;
+    background:#F8FAFC; border:1px solid var(--line); border-radius:4px; font-size:12.5px;
+  }
+  .file-row .dot{width:8px; height:8px; border-radius:50%; background:var(--ok); flex-shrink:0;}
+  .file-row .fname{font-family:var(--mono); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .file-row .meta{color:var(--ink-soft); flex-shrink:0;}
+  .file-row .x{cursor:pointer; color:var(--bad); font-weight:700; padding:0 4px; flex-shrink:0;}
+
+  .col-config{
+    margin:10px 0 0 32px; padding:12px 14px; background:#F8FAFC; border:1px solid var(--line); border-radius:4px;
+  }
+  .col-config .cfg-file{font-family:var(--mono); font-size:11.5px; color:var(--slate); font-weight:600; margin-bottom:8px;}
+  .field-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px 16px;}
+  .field.narrow{max-width:110px;}
+  .field{display:flex; flex-direction:column; gap:4px;}
+  .field label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; font-weight:600;}
+  select, input[type=number]{
+    font-family:var(--mono); font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:3px;
+    background:#fff; color:var(--ink); width:100%;
+  }
+  select:focus, input[type=number]:focus{outline:2px solid var(--slate); outline-offset:1px;}
+
+  .runbar{
+    display:flex; align-items:center; gap:14px; margin:26px 0;
+  }
+  button.run{
+    font-family:var(--sans); font-weight:700; font-size:13.5px; color:#fff; background:var(--navy);
+    border:none; padding:12px 26px; border-radius:4px; cursor:pointer; letter-spacing:.2px;
+  }
+  button.run:hover{background:var(--navy-deep);}
+  button.run:disabled{background:#B7C1D1; cursor:not-allowed;}
+  .runbar .hint{font-size:12px; color:var(--ink-soft);}
+
+  .summary{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;}
+  .stat{background:#fff; border:1px solid var(--line); border-radius:6px; padding:14px 16px; border-top:3px solid var(--slate);}
+  .stat.ok-top{border-top-color:var(--ok);}
+  .stat.warn-top{border-top-color:var(--warn);}
+  .stat.bad-top{border-top-color:var(--bad);}
+  .stat.notq-top{border-top-color:var(--ink-soft);}
+  .stat .n{font-family:var(--mono); font-size:26px; font-weight:600; line-height:1;}
+  .stat .lbl{font-size:11.5px; color:var(--ink-soft); margin-top:6px; text-transform:uppercase; letter-spacing:.4px;}
+
+  .filters{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;}
+  .filters button{
+    font-family:var(--mono); font-size:11.5px; padding:6px 12px; border-radius:3px; border:1px solid var(--line);
+    background:#fff; color:var(--ink-soft); cursor:pointer;
+  }
+  .filters button.active{background:var(--navy); color:#fff; border-color:var(--navy);}
+
+  table{width:100%; border-collapse:collapse; font-size:12.5px; background:#fff;}
+  thead th{
+    text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.4px;
+    color:var(--ink-soft); border-bottom:2px solid var(--line); padding:8px 10px; background:#F8FAFC;
+    position:sticky; top:0;
+  }
+  tbody td{padding:8px 10px; border-bottom:1px solid var(--line); font-family:var(--mono); vertical-align:top;}
+  tbody tr:hover{background:#FAFBFD;}
+  .lane-id{font-weight:600; color:var(--navy);}
+  .badge{
+    display:inline-block; font-family:var(--mono); font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:3px;
+    text-transform:uppercase; letter-spacing:.3px; white-space:nowrap;
+  }
+  .badge.match{background:var(--ok-bg); color:var(--ok);}
+  .badge.mismatch{background:var(--bad-bg); color:var(--bad);}
+  .badge.missing{background:var(--warn-bg); color:var(--warn);}
+  .badge.notq{background:#EAEDF2; color:var(--ink-soft);}
+  .badge.dup{background:var(--bad-bg); color:var(--bad);}
+  .val-bad{color:var(--bad); font-weight:600;}
+  .val-dim{color:var(--ink-soft);}
+  .table-wrap{max-height:520px; overflow:auto; border:1px solid var(--line); border-radius:6px;}
+  .empty-state{
+    text-align:center; padding:50px 20px; color:var(--ink-soft); font-size:13px;
+  }
+  .empty-state .big{font-size:15px; color:var(--ink); font-weight:600; margin-bottom:6px;}
+  footer{text-align:center; padding:20px; font-size:11px; color:var(--ink-soft); font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="rail"></div>
+<header>
+  <div>
+    <div class="eyebrow">STS Pricing — Reconciliation</div>
+    <h1>Lane Reconciliation Checker</h1>
+  </div>
+  <div class="tag">source rates → workbook → upload · matched on lane ID</div>
+</header>
+
+<main>
+  <div class="stage">
+    <div class="node active" id="stage-1">1 · Rate sources</div>
+    <div class="arrow">→</div>
+    <div class="node" id="stage-2">2 · Workbook</div>
+    <div class="arrow">→</div>
+    <div class="node" id="stage-3">3 · Upload file</div>
+    <div class="arrow">→</div>
+    <div class="node" id="stage-4">4 · Reconciliation</div>
+  </div>
+
+  <!-- STEP 1: SOURCE FILES -->
+  <div class="panel">
+    <div class="panel-title"><span class="idx">1</span><h2>Rate source files</h2></div>
+    <div class="panel-sub">TJ, Paul, Vlad, Juan, or anyone else who returned filled-in rates. Add as many as you need — .xlsx only.</div>
+    <div class="drop" id="drop-source">
+      <span class="icon">＋</span>Drop .xlsx files here, or click to browse
+      <input type="file" id="input-source" multiple accept=".xlsx,.xls">
+    </div>
+    <div id="source-files"></div>
+    <div id="source-config"></div>
+  </div>
+
+  <!-- STEP 2: WORKBOOK -->
+  <div class="panel">
+    <div class="panel-title"><span class="idx">2</span><h2>Merged workbook</h2></div>
+    <div class="panel-sub">The file you build from the source rates, with FSC calculated in.</div>
+    <div class="drop" id="drop-workbook">
+      <span class="icon">＋</span>Drop the workbook .xlsx, or click to browse
+      <input type="file" id="input-workbook" accept=".xlsx,.xls">
+    </div>
+    <div id="workbook-files"></div>
+    <div id="workbook-config"></div>
+  </div>
+
+  <!-- STEP 3: UPLOAD FILE -->
+  <div class="panel">
+    <div class="panel-title"><span class="idx">3</span><h2>Final upload file</h2></div>
+    <div class="panel-sub">What actually goes into the customer's portal.</div>
+    <div class="drop" id="drop-upload">
+      <span class="icon">＋</span>Drop the upload .xlsx, or click to browse
+      <input type="file" id="input-upload" accept=".xlsx,.xls">
+    </div>
+    <div id="upload-files"></div>
+    <div id="upload-config"></div>
+  </div>
+
+  <div class="runbar">
+    <button class="run" id="run-btn" disabled>Run reconciliation</button>
+    <span class="hint" id="run-hint">Upload at least one source file, a workbook, and an upload file to continue.</span>
+  </div>
+
+  <div id="results"></div>
+</main>
+<footer>runs entirely in your browser — files are never uploaded anywhere</footer>
+
+<script>
+const state = {
+  sources: [],   // {id,name,aoa,headerRow,columns,dataRows,laneCol,rateCol}
+  workbook: null, // {name,aoa,headerRow,columns,dataRows,laneCol,allInCol,finalCol}
+  upload: null    // {name,aoa,headerRow,columns,dataRows,laneCol,rateCol}
+};
+let uid = 0;
+
+function colLetter(idx){ return XLSX.utils.encode_col(idx); }
+
+function readWorkbookRaw(file, cb){
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, {type:'array'});
+    const sheetNames = wb.SheetNames;
+    const defaultSheet = sheetNames.includes('Lane Set') ? 'Lane Set'
+      : (sheetNames.find(n=>/bid/i.test(n)) || sheetNames[0]);
+    const sheets = {};
+    sheetNames.forEach(name=>{
+      sheets[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:null, raw:true});
+    });
+    cb({sheetNames, sheets, defaultSheet});
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Build columns + data rows for a given header row (1-indexed)
+function buildFromHeaderRow(aoa, headerRow){
+  const headerArr = aoa[headerRow-1] || [];
+  let maxCols = headerArr.length;
+  aoa.forEach(r=>{ if(r && r.length>maxCols) maxCols = r.length; });
+  const columns = [];
+  for(let i=0;i<maxCols;i++){
+    const raw = headerArr[i];
+    const name = (raw===undefined||raw===null||String(raw).trim()==='') ? null : String(raw).trim();
+    columns.push({idx:i, letter:colLetter(i), name, label: name ? `${colLetter(i)}: ${name}` : `${colLetter(i)} (blank header)`});
+  }
+  const dataRows = aoa.slice(headerRow).filter(r=>
+    r && r.some(c=>c!==null && c!==undefined && String(c).trim()!=='')
+  );
+  return {columns, dataRows};
+}
+
+function guessColIndex(columns, patterns){
+  for(const p of patterns){
+    const col = columns.find(c=>c.name && c.name.toLowerCase().includes(p));
+    if(col) return col.idx;
+  }
+  return columns.length ? columns[0].idx : 0;
+}
+
+function fieldSelect(id, label, columns, selectedIdx){
+  const opts = columns.map(c=>`<option value="${c.idx}" ${c.idx===selectedIdx?'selected':''}>${escHtml(c.label)}</option>`).join('');
+  return `<div class="field"><label>${label}</label><select id="${id}">${opts}</select></div>`;
+}
+function headerRowField(id, value){
+  return `<div class="field narrow"><label>Header row</label><input type="number" min="1" id="${id}" value="${value}"></div>`;
+}
+function sheetSelectField(id, sheetNames, selected){
+  const opts = sheetNames.map(n=>`<option value="${escAttr(n)}" ${n===selected?'selected':''}>${escHtml(n)}</option>`).join('');
+  return `<div class="field"><label>Sheet</label><select id="${id}">${opts}</select></div>`;
+}
+function escAttr(s){return String(s).replace(/"/g,'&quot;');}
+function escHtml(s){return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+// ---------- SOURCE FILES ----------
+function setupDrop(dropId, inputId, onFiles, multiple){
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  drop.addEventListener('click', ()=>input.click());
+  input.addEventListener('change', e=>{ onFiles(Array.from(e.target.files)); input.value=''; });
+  drop.addEventListener('dragover', e=>{e.preventDefault(); drop.classList.add('drag');});
+  drop.addEventListener('dragleave', ()=>drop.classList.remove('drag'));
+  drop.addEventListener('drop', e=>{
+    e.preventDefault(); drop.classList.remove('drag');
+    const files = Array.from(e.dataTransfer.files).filter(f=>/\.xlsx?$/i.test(f.name));
+    if(files.length) onFiles(multiple ? files : [files[0]]);
+  });
+}
+
+setupDrop('drop-source','input-source', files=>{
+  files.forEach(f=>{
+    readWorkbookRaw(f, parsed=>{
+      const id = 'src'+(uid++);
+      const aoa = parsed.sheets[parsed.defaultSheet];
+      const {columns, dataRows} = buildFromHeaderRow(aoa, 1);
+      state.sources.push({
+        id, name:f.name, sheetNames:parsed.sheetNames, sheets:parsed.sheets,
+        sheetName:parsed.defaultSheet, aoa, headerRow:1, columns, dataRows,
+        laneCol: guessColIndex(columns, ['route id','lane id','lane']),
+        rateCol: guessColIndex(columns, ['all in rate','flat rate','rate'])
+      });
+      renderSources();
+      updateRunState();
+    });
+  });
+}, true);
+
+function rebuildSourceSheet(s, newSheetName){
+  s.sheetName = newSheetName;
+  s.aoa = s.sheets[newSheetName];
+  s.headerRow = 1;
+  rebuildSource(s, 1);
+}
+
+function rebuildSource(s, newHeaderRow){
+  s.headerRow = Math.max(1, newHeaderRow||1);
+  const {columns, dataRows} = buildFromHeaderRow(s.aoa, s.headerRow);
+  s.columns = columns; s.dataRows = dataRows;
+  if(!columns.find(c=>c.idx===s.laneCol)) s.laneCol = guessColIndex(columns, ['route id','lane id','lane']);
+  if(!columns.find(c=>c.idx===s.rateCol)) s.rateCol = guessColIndex(columns, ['all in rate','flat rate','rate']);
+}
+
+function renderSources(){
+  const listEl = document.getElementById('source-files');
+  const cfgEl = document.getElementById('source-config');
+  listEl.innerHTML = state.sources.map(s=>`
+    <div class="file-row">
+      <span class="dot"></span>
+      <span class="fname">${escHtml(s.name)}</span>
+      <span class="meta">${s.dataRows.length} rows</span>
+      <span class="x" data-remove="${s.id}" title="Remove">✕</span>
+    </div>`).join('');
+  listEl.querySelectorAll('[data-remove]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      state.sources = state.sources.filter(s=>s.id!==el.dataset.remove);
+      renderSources(); updateRunState();
+    });
+  });
+  cfgEl.innerHTML = state.sources.map(s=>`
+    <div class="col-config">
+      <div class="cfg-file">${escHtml(s.name)}</div>
+      <div class="field-grid">
+        ${sheetSelectField(s.id+'-sheet', s.sheetNames, s.sheetName)}
+        ${headerRowField(s.id+'-hdr', s.headerRow)}
+        ${fieldSelect(s.id+'-lane','Lane ID column', s.columns, s.laneCol)}
+        ${fieldSelect(s.id+'-rate','Rate column', s.columns, s.rateCol)}
+      </div>
+    </div>`).join('');
+  state.sources.forEach(s=>{
+    document.getElementById(s.id+'-lane').addEventListener('change', e=>s.laneCol=parseInt(e.target.value));
+    document.getElementById(s.id+'-rate').addEventListener('change', e=>s.rateCol=parseInt(e.target.value));
+    document.getElementById(s.id+'-hdr').addEventListener('change', e=>{
+      rebuildSource(s, parseInt(e.target.value));
+      renderSources();
+    });
+    document.getElementById(s.id+'-sheet').addEventListener('change', e=>{
+      rebuildSourceSheet(s, e.target.value);
+      renderSources();
+    });
+  });
+}
+
+// ---------- WORKBOOK ----------
+setupDrop('drop-workbook','input-workbook', files=>{
+  const f = files[0];
+  readWorkbookRaw(f, parsed=>{
+    const aoa = parsed.sheets[parsed.defaultSheet];
+    const {columns, dataRows} = buildFromHeaderRow(aoa, 1);
+    state.workbook = {
+      name:f.name, sheetNames:parsed.sheetNames, sheets:parsed.sheets,
+      sheetName:parsed.defaultSheet, aoa, headerRow:1, columns, dataRows,
+      laneCol: guessColIndex(columns, ['route id','lane id','lane']),
+      allInCol: guessColIndex(columns, ['all in rate']),
+      finalCol: guessColIndex(columns, ['flat rate usd - per load.1','flat rate usd - per load','flat rate'])
+    };
+    renderWorkbook();
+    updateRunState();
+  });
+}, false);
+
+function rebuildWorkbookSheet(w, newSheetName){
+  w.sheetName = newSheetName;
+  w.aoa = w.sheets[newSheetName];
+  w.headerRow = 1;
+  rebuildWorkbook(w, 1);
+}
+
+function rebuildWorkbook(w, newHeaderRow){
+  w.headerRow = Math.max(1, newHeaderRow||1);
+  const {columns, dataRows} = buildFromHeaderRow(w.aoa, w.headerRow);
+  w.columns = columns; w.dataRows = dataRows;
+  if(!columns.find(c=>c.idx===w.laneCol)) w.laneCol = guessColIndex(columns, ['route id','lane id','lane']);
+  if(!columns.find(c=>c.idx===w.allInCol)) w.allInCol = guessColIndex(columns, ['all in rate']);
+  if(!columns.find(c=>c.idx===w.finalCol)) w.finalCol = guessColIndex(columns, ['flat rate usd - per load.1','flat rate usd - per load','flat rate']);
+}
+
+function renderWorkbook(){
+  const listEl = document.getElementById('workbook-files');
+  const cfgEl = document.getElementById('workbook-config');
+  if(!state.workbook){ listEl.innerHTML=''; cfgEl.innerHTML=''; return; }
+  const w = state.workbook;
+  listEl.innerHTML = `
+    <div class="file-row">
+      <span class="dot"></span>
+      <span class="fname">${escHtml(w.name)}</span>
+      <span class="meta">${w.dataRows.length} rows</span>
+      <span class="x" data-remove-wb title="Remove">✕</span>
+    </div>`;
+  listEl.querySelector('[data-remove-wb]').addEventListener('click', ()=>{
+    state.workbook = null; renderWorkbook(); updateRunState();
+  });
+  cfgEl.innerHTML = `
+    <div class="col-config">
+      <div class="cfg-file">${escHtml(w.name)}</div>
+      <div class="field-grid">
+        ${sheetSelectField('wb-sheet', w.sheetNames, w.sheetName)}
+        ${headerRowField('wb-hdr', w.headerRow)}
+        ${fieldSelect('wb-lane','Lane ID column', w.columns, w.laneCol)}
+        ${fieldSelect('wb-allin','Consolidated rate<br>(copied in from sources)', w.columns, w.allInCol)}
+        ${fieldSelect('wb-final','Final rate<br>(after FSC)', w.columns, w.finalCol)}
+      </div>
+    </div>`;
+  document.getElementById('wb-lane').addEventListener('change', e=>w.laneCol=parseInt(e.target.value));
+  document.getElementById('wb-allin').addEventListener('change', e=>w.allInCol=parseInt(e.target.value));
+  document.getElementById('wb-final').addEventListener('change', e=>w.finalCol=parseInt(e.target.value));
+  document.getElementById('wb-hdr').addEventListener('change', e=>{
+    rebuildWorkbook(w, parseInt(e.target.value));
+    renderWorkbook();
+  });
+  document.getElementById('wb-sheet').addEventListener('change', e=>{
+    rebuildWorkbookSheet(w, e.target.value);
+    renderWorkbook();
+  });
+}
+
+// ---------- UPLOAD FILE ----------
+setupDrop('drop-upload','input-upload', files=>{
+  const f = files[0];
+  readWorkbookRaw(f, parsed=>{
+    const aoa = parsed.sheets[parsed.defaultSheet];
+    const {columns, dataRows} = buildFromHeaderRow(aoa, 1);
+    state.upload = {
+      name:f.name, sheetNames:parsed.sheetNames, sheets:parsed.sheets,
+      sheetName:parsed.defaultSheet, aoa, headerRow:1, columns, dataRows,
+      laneCol: guessColIndex(columns, ['route id','lane id','lane']),
+      rateCol: guessColIndex(columns, ['flat rate usd - per load','flat rate','all in rate'])
+    };
+    renderUpload();
+    updateRunState();
+  });
+}, false);
+
+function rebuildUploadSheet(u, newSheetName){
+  u.sheetName = newSheetName;
+  u.aoa = u.sheets[newSheetName];
+  u.headerRow = 1;
+  rebuildUpload(u, 1);
+}
+
+function rebuildUpload(u, newHeaderRow){
+  u.headerRow = Math.max(1, newHeaderRow||1);
+  const {columns, dataRows} = buildFromHeaderRow(u.aoa, u.headerRow);
+  u.columns = columns; u.dataRows = dataRows;
+  if(!columns.find(c=>c.idx===u.laneCol)) u.laneCol = guessColIndex(columns, ['route id','lane id','lane']);
+  if(!columns.find(c=>c.idx===u.rateCol)) u.rateCol = guessColIndex(columns, ['flat rate usd - per load','flat rate','all in rate']);
+}
+
+function renderUpload(){
+  const listEl = document.getElementById('upload-files');
+  const cfgEl = document.getElementById('upload-config');
+  if(!state.upload){ listEl.innerHTML=''; cfgEl.innerHTML=''; return; }
+  const u = state.upload;
+  listEl.innerHTML = `
+    <div class="file-row">
+      <span class="dot"></span>
+      <span class="fname">${escHtml(u.name)}</span>
+      <span class="meta">${u.dataRows.length} rows</span>
+      <span class="x" data-remove-up title="Remove">✕</span>
+    </div>`;
+  listEl.querySelector('[data-remove-up]').addEventListener('click', ()=>{
+    state.upload = null; renderUpload(); updateRunState();
+  });
+  cfgEl.innerHTML = `
+    <div class="col-config">
+      <div class="cfg-file">${escHtml(u.name)}</div>
+      <div class="field-grid">
+        ${sheetSelectField('up-sheet', u.sheetNames, u.sheetName)}
+        ${headerRowField('up-hdr', u.headerRow)}
+        ${fieldSelect('up-lane','Lane ID column', u.columns, u.laneCol)}
+        ${fieldSelect('up-rate','Rate column', u.columns, u.rateCol)}
+      </div>
+    </div>`;
+  document.getElementById('up-lane').addEventListener('change', e=>u.laneCol=parseInt(e.target.value));
+  document.getElementById('up-rate').addEventListener('change', e=>u.rateCol=parseInt(e.target.value));
+  document.getElementById('up-hdr').addEventListener('change', e=>{
+    rebuildUpload(u, parseInt(e.target.value));
+    renderUpload();
+  });
+  document.getElementById('up-sheet').addEventListener('change', e=>{
+    rebuildUploadSheet(u, e.target.value);
+    renderUpload();
+  });
+}
+
+function updateRunState(){
+  const ready = state.sources.length>0 && state.workbook && state.upload;
+  document.getElementById('run-btn').disabled = !ready;
+  document.getElementById('run-hint').textContent = ready
+    ? `Ready — ${state.sources.length} source file(s), workbook, and upload file loaded.`
+    : 'Upload at least one source file, a workbook, and an upload file to continue.';
+  document.getElementById('stage-1').classList.toggle('active', state.sources.length>0);
+  document.getElementById('stage-2').classList.toggle('active', !!state.workbook);
+  document.getElementById('stage-3').classList.toggle('active', !!state.upload);
+}
+
+// ---------- RECONCILIATION ----------
+function normLane(v){
+  if(v===null || v===undefined) return '';
+  return String(v).trim().toUpperCase();
+}
+function normRate(v){
+  if(v===null || v===undefined || v==='') return null;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g,''));
+  return isNaN(n) ? null : n;
+}
+function ratesEqual(a,b){
+  if(a===null || b===null) return false;
+  return Math.abs(a-b) < 0.01;
+}
+
+document.getElementById('run-btn').addEventListener('click', runReconciliation);
+
+function runReconciliation(){
+  const w = state.workbook, u = state.upload;
+
+  // index source rates by lane -> [{source, rate, raw}]
+  const sourceIndex = {};
+  state.sources.forEach(s=>{
+    s.dataRows.forEach(r=>{
+      const lane = normLane(r[s.laneCol]);
+      if(!lane) return;
+      const rate = normRate(r[s.rateCol]);
+      if(rate===null) return; // not yet quoted by this source
+      if(!sourceIndex[lane]) sourceIndex[lane]=[];
+      sourceIndex[lane].push({source:s.name, rate});
+    });
+  });
+
+  // index upload rows by lane
+  const uploadIndex = {};
+  u.dataRows.forEach(r=>{
+    const lane = normLane(r[u.laneCol]);
+    if(!lane) return;
+    if(uploadIndex[lane]) uploadIndex[lane] = 'DUP';
+    else uploadIndex[lane] = normRate(r[u.rateCol]);
+  });
+
+  const wbLaneSeen = {};
+  const results = [];
+
+  w.dataRows.forEach(r=>{
+    const laneRaw = r[w.laneCol];
+    const lane = normLane(laneRaw);
+    if(!lane) return;
+
+    const flags = [];
+    let status = 'match';
+
+    // duplicate lane within workbook
+    if(wbLaneSeen[lane]){
+      flags.push('Duplicate lane in workbook');
+      status='mismatch';
+    }
+    wbLaneSeen[lane] = true;
+
+    const wbAllIn = normRate(r[w.allInCol]);
+    const wbFinal = normRate(r[w.finalCol]);
+    const srcMatches = sourceIndex[lane] || [];
+
+    let sourceCell = '<span class="val-dim">not quoted</span>';
+    let uploadCell = '<span class="val-dim">not in upload</span>';
+    const notQuotedAtAll = srcMatches.length===0 && wbAllIn===null && wbFinal===null;
+
+    if(notQuotedAtAll){
+      if(status==='match') status='not_quoted';
+      flags.push('Not yet quoted by any source');
+    } else {
+      // Stage A: source(s) -> workbook consolidated rate
+      if(srcMatches.length===0){
+        if(wbAllIn!==null){
+          flags.push('No source file has this lane');
+          status = status==='match' ? 'missing' : status;
+        }
+      } else {
+        const distinctRates = [...new Set(srcMatches.map(m=>m.rate))];
+        sourceCell = srcMatches.map(m=>`${escHtml(m.source.replace(/\.xlsx?$/i,''))}: ${m.rate}`).join('<br>');
+        if(distinctRates.length>1){
+          flags.push('Conflicting rates across source files');
+          status='mismatch';
+        } else if(wbAllIn===null){
+          flags.push('Source has a rate but workbook is blank');
+          status='mismatch';
+        } else if(!ratesEqual(distinctRates[0], wbAllIn)){
+          flags.push(`Source rate (${distinctRates[0]}) ≠ workbook rate (${wbAllIn})`);
+          status='mismatch';
+        }
+      }
+
+      // Stage B: workbook final -> upload file
+      const upVal = uploadIndex[lane];
+      if(upVal==='DUP'){
+        flags.push('Duplicate lane in upload file');
+        status='mismatch';
+        uploadCell = '<span class="val-bad">duplicate</span>';
+      } else if(upVal===undefined){
+        if(wbFinal!==null){
+          flags.push('Missing from upload file');
+          status = status==='match' ? 'missing' : status;
+        }
+      } else {
+        uploadCell = String(upVal);
+        if(wbFinal===null){
+          flags.push('In upload but workbook has no final rate');
+          status='mismatch';
+        } else if(!ratesEqual(wbFinal, upVal)){
+          flags.push(`Workbook final (${wbFinal}) ≠ upload (${upVal})`);
+          status='mismatch';
+        }
+      }
+    }
+
+    results.push({
+      lane: laneRaw, status, flags,
+      sourceCell, wbAllIn: wbAllIn===null?'—':wbAllIn,
+      wbFinal: wbFinal===null?'—':wbFinal, uploadCell
+    });
+  });
+
+  // lanes present in a source file but entirely absent from workbook
+  Object.keys(sourceIndex).forEach(lane=>{
+    if(!wbLaneSeen[lane]){
+      results.push({
+        lane, status:'mismatch',
+        flags:['Source file has this lane — missing from workbook entirely'],
+        sourceCell: sourceIndex[lane].map(m=>`${escHtml(m.source)}: ${m.rate}`).join('<br>'),
+        wbAllIn:'<span class="val-bad">missing row</span>', wbFinal:'—', uploadCell:'—'
+      });
+    }
+  });
+
+  renderResults(results);
+  document.getElementById('stage-4').classList.add('active');
+}
+
+const ALL_STATUSES = ['match','mismatch','missing','not_quoted'];
+let activeFilters = new Set(ALL_STATUSES); // all on by default
+let lastResults = [];
+
+function badgeClass(status){
+  if(status==='match') return 'match';
+  if(status==='missing') return 'missing';
+  if(status==='not_quoted') return 'notq';
+  return 'mismatch';
+}
+function badgeLabel(status){
+  return status==='not_quoted' ? 'not quoted' : status;
+}
+
+function renderResults(results){
+  lastResults = results;
+  const total = results.length;
+  const clean = results.filter(r=>r.status==='match').length;
+  const mismatch = results.filter(r=>r.status==='mismatch').length;
+  const missing = results.filter(r=>r.status==='missing').length;
+  const notQuoted = results.filter(r=>r.status==='not_quoted').length;
+  const allOn = activeFilters.size===ALL_STATUSES.length;
+
+  const html = `
+    <div class="summary">
+      <div class="stat"><div class="n">${total}</div><div class="lbl">Total lanes</div></div>
+      <div class="stat ok-top"><div class="n">${clean}</div><div class="lbl">Clean</div></div>
+      <div class="stat bad-top"><div class="n">${mismatch}</div><div class="lbl">Mismatches</div></div>
+      <div class="stat warn-top"><div class="n">${missing}</div><div class="lbl">Missing</div></div>
+      <div class="stat notq-top"><div class="n">${notQuoted}</div><div class="lbl">Not quoted</div></div>
+    </div>
+    <div class="filters">
+      <button data-f="all" class="${allOn?'active':''}">All (${total})</button>
+      <button data-f="mismatch" class="${activeFilters.has('mismatch')?'active':''}">Mismatches (${mismatch})</button>
+      <button data-f="missing" class="${activeFilters.has('missing')?'active':''}">Missing (${missing})</button>
+      <button data-f="not_quoted" class="${activeFilters.has('not_quoted')?'active':''}">Not quoted (${notQuoted})</button>
+      <button data-f="match" class="${activeFilters.has('match')?'active':''}">Clean (${clean})</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Lane ID</th><th>Status</th><th>Source rate(s)</th>
+          <th>Workbook all-in</th><th>Workbook final</th><th>Upload rate</th><th>Notes</th>
+        </tr></thead>
+        <tbody>
+          ${results.filter(r=>activeFilters.has(r.status)).map(r=>`
+            <tr>
+              <td class="lane-id">${escHtml(r.lane)}</td>
+              <td><span class="badge ${badgeClass(r.status)}">${badgeLabel(r.status)}</span></td>
+              <td>${r.sourceCell}</td>
+              <td>${r.wbAllIn}</td>
+              <td>${r.wbFinal}</td>
+              <td>${r.uploadCell}</td>
+              <td>${r.flags.map(f=>escHtml(f)).join('<br>')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  document.getElementById('results').innerHTML = html;
+  document.querySelectorAll('.filters button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const f = b.dataset.f;
+      if(f==='all'){
+        activeFilters = new Set(ALL_STATUSES);
+      } else {
+        if(activeFilters.has(f)){
+          if(activeFilters.size>1) activeFilters.delete(f); // keep at least one on
+        } else {
+          activeFilters.add(f);
+        }
+      }
+      renderResults(lastResults);
+    });
+  });
+}
+</script>
+</body>
+</html>
