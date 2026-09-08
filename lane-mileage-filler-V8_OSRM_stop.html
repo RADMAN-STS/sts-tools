@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lane Mileage Filler — CAN / US / MEX</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#0c1f47;
+    --paper:#f4f6fa;
+    --line:#d7dce6;
+    --navy:#0c1f47;
+    --navy-2:#152c5e;
+    --road:#b9781a;
+    --road-dim:#e8d3ac;
+    --go:#2f6f4f;
+    --panel:#ffffff;
+    --muted:#5c6478;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px 80px;}
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:linear-gradient(135deg, var(--navy), var(--navy-2));
+    color:#fff;
+    padding:22px 30px;
+    margin:0 -24px 28px;
+    border-bottom:3px solid var(--road);
+    flex-wrap:wrap;
+    gap:14px;
+  }
+  .brand{display:flex; align-items:center; gap:16px;}
+  .brand img{height:38px; width:auto; display:block; background:#fff; border-radius:4px; padding:5px 8px;}
+  .brand-text h1{
+    font-size:22px;
+    margin:0;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    color:#fff;
+  }
+  .brand-text .subtitle{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:11.5px;
+    color:#aebbdd;
+    letter-spacing:.03em;
+    margin-top:2px;
+  }
+  .tag{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:12px;
+    color:#c7d0e8;
+    letter-spacing:.02em;
+    text-align:right;
+  }
+  .step{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:22px 26px;
+    margin-bottom:18px;
+  }
+  .step h2{
+    font-size:15px;
+    margin:0 0 14px;
+    font-family:"SF Mono","Menlo",monospace;
+    font-weight:600;
+    color:var(--road);
+    text-transform:none;
+  }
+  .dropzone{
+    border:2px dashed var(--line);
+    border-radius:3px;
+    padding:36px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone.drag{border-color:var(--road); background:#fff8f5;}
+  .dropzone p{margin:6px 0; color:var(--muted); font-size:14px;}
+  .dropzone .big{font-size:17px; color:var(--ink);}
+  input[type=file]{display:none;}
+  select, button{
+    font-family:inherit;
+    font-size:14px;
+  }
+  select{
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:#fff;
+    color:var(--ink);
+    min-width:220px;
+  }
+  button{
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    padding:11px 22px;
+    border-radius:3px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button:hover{background:#000;}
+  button:disabled{background:#b8b2a4; cursor:not-allowed;}
+  button.secondary{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--ink);
+  }
+  button.secondary:hover{background:var(--ink); color:#fff;}
+  .map-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:22px;
+  }
+  @media (max-width:640px){.map-grid{grid-template-columns:1fr;}}
+  .toggle-row{
+    margin-top:18px;
+    padding:12px 14px;
+    background:#fbfaf7;
+    border:1px solid var(--line);
+    border-radius:3px;
+  }
+  .toggle-label{
+    display:flex;
+    align-items:flex-start;
+    gap:9px;
+    font-size:13px;
+    color:var(--ink);
+    line-height:1.5;
+    cursor:pointer;
+  }
+  .toggle-label input{margin-top:3px; flex-shrink:0;}
+  .col-group h3{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+    margin:0 0 10px;
+    font-family:"SF Mono","Menlo",monospace;
+    font-weight:600;
+  }
+  .field-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+    gap:10px;
+  }
+  .field-row label{font-size:13px; color:var(--ink); flex-shrink:0;}
+  .hint{font-size:12px; color:var(--muted); margin-top:2px;}
+  .actions{margin-top:22px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  table{width:100%; border-collapse:collapse; font-size:12px; margin-top:14px;}
+  th,td{padding:5px 8px; border-bottom:1px solid var(--line); text-align:left;}
+  th{font-family:"SF Mono","Menlo",monospace; font-weight:600; color:var(--muted); font-size:11px; text-transform:uppercase;}
+  .preview-wrap{max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:3px;}
+  #rawTable tr{cursor:pointer;}
+  #rawTable tr:hover td{background:#fff8f5;}
+  #rawTable tr.chosen-header td{background:var(--road); color:#fff; font-weight:600;}
+  #rawTable tr.chosen-header:hover td{background:var(--road);}
+  #rawTable td.rownum{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:10px;
+    color:var(--muted);
+    width:28px;
+    text-align:right;
+    padding-right:10px;
+    user-select:none;
+  }
+  #rawTable tr.chosen-header td.rownum{color:#fff;}
+  .progress-outer{
+    background:#eae6db;
+    border-radius:20px;
+    height:10px;
+    overflow:hidden;
+    margin:14px 0 6px;
+  }
+  .progress-inner{
+    background:var(--road);
+    height:100%;
+    width:0%;
+    transition:width .2s;
+  }
+  .progress-label{font-size:13px; color:var(--muted); font-family:"SF Mono","Menlo",monospace;}
+  .log{
+    max-height:160px;
+    overflow-y:auto;
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:11.5px;
+    color:var(--muted);
+    background:#fbfaf7;
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:10px 12px;
+    margin-top:10px;
+  }
+  .log div{margin-bottom:2px;}
+  .log .warn{color:#a06a1c;}
+  .log .err{color:#b4372b;}
+  .log .ok{color:var(--go);}
+  .badge{
+    display:inline-block;
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:11px;
+    padding:2px 7px;
+    border-radius:10px;
+    background:#eae6db;
+    color:var(--muted);
+    margin-left:8px;
+  }
+  .badge.osrm{background:#e3efe8; color:var(--go);}
+  .badge.geo{background:#f2e6dd; color:var(--road);}
+  .badge.est{background:#eee; color:#888;}
+  .hidden{display:none !important;}
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--muted);
+    margin-top:40px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+    font-family:"SF Mono","Menlo",monospace;
+  }
+  .key-hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:8px;
+    line-height:1.6;
+  }
+  .stat-row{display:flex; gap:24px; margin-top:10px; flex-wrap:wrap;}
+  .stat{font-family:"SF Mono","Menlo",monospace; font-size:12px;}
+  .stat b{display:block; font-size:20px; font-family:inherit; color:var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <img src="data:image/png;base64,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" alt="Sun Transportation Systems">
+      <div class="brand-text">
+        <h1>Lane Mileage Filler</h1>
+        <div class="subtitle">Sun Transportation Systems — Pricing &amp; Data</div>
+      </div>
+    </div>
+    <div class="tag">CAN · US · MEX<br>postal → city → state fallback</div>
+  </header>
+
+  <!-- STEP 1: UPLOAD -->
+  <div class="step" id="step-upload">
+    <h2>01 — Upload lane file</h2>
+    <div class="dropzone" id="dropzone">
+      <p class="big">Drop an Excel file here, or click to browse</p>
+      <p>.xlsx or .xls — origin and destination columns, postal code preferred</p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    </div>
+  </div>
+
+  <!-- STEP 2: SHEET + COLUMN MAPPING -->
+  <div class="step hidden" id="step-map">
+    <h2>02 — Confirm sheet and columns</h2>
+    <div class="field-row">
+      <label>Sheet</label>
+      <select id="sheetSelect"></select>
+    </div>
+
+    <p class="hint" id="headerInstructions">Click the row below that actually contains your column headers.</p>
+    <div class="preview-wrap">
+      <table id="rawTable"></table>
+    </div>
+
+    <div class="map-grid hidden" id="mapGridWrap">
+      <div class="col-group">
+        <h3>Origin</h3>
+        <div class="field-row"><label>Postal / ZIP code</label><select id="map-o-postal"></select></div>
+        <div class="field-row"><label>City</label><select id="map-o-city"></select></div>
+        <div class="field-row"><label>State / Province</label><select id="map-o-state"></select></div>
+        <div class="field-row"><label>Country (optional)</label><select id="map-o-country"></select></div>
+      </div>
+      <div class="col-group">
+        <h3>Destination</h3>
+        <div class="field-row"><label>Postal / ZIP code</label><select id="map-d-postal"></select></div>
+        <div class="field-row"><label>City</label><select id="map-d-city"></select></div>
+        <div class="field-row"><label>State / Province</label><select id="map-d-state"></select></div>
+        <div class="field-row"><label>Country (optional)</label><select id="map-d-country"></select></div>
+      </div>
+    </div>
+    <p class="hint hidden" id="mapHint">Leave a field as "— none —" if that column doesn't exist. Postal code is used first when present; city + state is the fallback.</p>
+
+    <div class="toggle-row hidden" id="roundTripWrap">
+      <div class="field-row">
+        <label>Round Trip / One Way column (optional)</label>
+        <select id="map-roundtrip"></select>
+      </div>
+      <p class="hint" style="margin:6px 0 0;">If mapped, a one-way lane's final mileage gets doubled when marked "Round Trip". If a lane already has stops that loop back to the origin, the stop chain covers the full trip already and doesn't get doubled again.</p>
+    </div>
+
+    <div class="toggle-row hidden" id="stopsWrap">
+      <div class="field-row">
+        <label>Number of stop columns (optional)</label>
+        <select id="numStops">
+          <option value="0">0 — none</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+          <option value="11">11</option>
+        </select>
+      </div>
+      <div id="stopMapRows"></div>
+      <p class="hint" style="margin:6px 0 0;">For multi-stop lanes, map each Stop column (expects a combined cell like "COLUMBIA CITY, IN, 46725, USA"). Mileage becomes the full chain: Origin → Stop 1 → Stop 2 → ... → Destination, added leg by leg. Blank stop cells are skipped.</p>
+    </div>
+
+    <div class="toggle-row hidden" id="mismatchToggleWrap">
+      <label class="toggle-label">
+        <input type="checkbox" id="mismatchToggle" checked>
+        Cross-check postal code against city (catches a wrong ZIP paired with the right city — adds an extra lookup per row, slower on large files)
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="runBtn" disabled>Calculate miles</button>
+      <button class="secondary" id="backBtn">Start over</button>
+      <span class="hint" id="rowCountHint"></span>
+    </div>
+  </div>
+
+  <!-- STEP 3: PROGRESS -->
+  <div class="step hidden" id="step-progress">
+    <h2>03 — Looking up distances</h2>
+    <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
+    <div class="progress-label" id="progressLabel">0 / 0 lanes</div>
+    <div class="stat-row">
+      <div class="stat"><b id="stat-osrm">0</b>road route</div>
+      <div class="stat"><b id="stat-geo">0</b>geocoded, estimated</div>
+      <div class="stat"><b id="stat-fail">0</b>not found</div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- STEP 4: DONE -->
+  <div class="step hidden" id="step-done">
+    <h2>04 — Done</h2>
+    <p>Miles column filled in. Each row is tagged with how the distance was found:</p>
+    <p>
+      <span class="badge osrm">road route</span> real driving miles from OSRM &nbsp;
+      <span class="badge est">estimated</span> straight-line × road factor (used when a road route couldn't be found, or when only city/state was available) &nbsp;
+      <span class="badge geo">not found</span> couldn't geocode one or both ends &nbsp;
+      <span class="badge geo">verify</span> ferry-only lane, route looks unusually indirect, or postal code and city don't match — double check before trusting the number
+    </p>
+    <div class="actions">
+      <button id="downloadBtn">Download filled workbook</button>
+      <button class="secondary" id="restartBtn">Process another file</button>
+    </div>
+  </div>
+
+  <footer>Postal lookups via Zippopotam.us · road routing via OSRM · straight-line fallback × 1.20 road factor</footer>
+</div>
+
+<script>
+(function(){
+  const state = {
+    workbook:null,
+    sheetName:null,
+    headers:[],
+    rows:[],       // array of arrays (raw), row 0 = header
+    mapping:{},
+    geoCache:{},   // key -> {lat,lon} or null
+    routeCache:{}, // "lat1,lon1|lat2,lon2" -> miles or null
+    resultRows:null
+  };
+
+  const $ = id => document.getElementById(id);
+  const steps = ['step-upload','step-map','step-progress','step-done'];
+  function showStep(id){
+    steps.forEach(s => $(s).classList.toggle('hidden', s!==id));
+  }
+
+  // ---------- STEP 1: FILE UPLOAD ----------
+  const dropzone = $('dropzone');
+  const fileInput = $('fileInput');
+  dropzone.addEventListener('click', ()=>fileInput.click());
+  ['dragover','dragenter'].forEach(evt=>{
+    dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.add('drag');});
+  });
+  ['dragleave','drop'].forEach(evt=>{
+    dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.remove('drag');});
+  });
+  dropzone.addEventListener('drop', e=>{
+    if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e=>{
+    if(e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file){
+    const reader = new FileReader();
+    reader.onload = e=>{
+      state.originalArrayBuffer = e.target.result; // kept raw for surgical XML writeback later
+      const data = new Uint8Array(e.target.result.slice(0));
+      const wb = XLSX.read(data, {type:'array', cellDates:false});
+      state.workbook = wb;
+      populateSheetSelect(wb);
+      showStep('step-map');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+
+  function populateSheetSelect(wb){
+    const sel = $('sheetSelect');
+    sel.innerHTML = '';
+    wb.SheetNames.forEach(name=>{
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      sel.appendChild(opt);
+    });
+    sel.value = wb.SheetNames[0];
+    sel.onchange = ()=>loadSheet(sel.value);
+    loadSheet(wb.SheetNames[0]);
+  }
+
+  function loadSheet(sheetName){
+    state.sheetName = sheetName;
+    const ws = state.workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+    state.allRows = rows;
+    state.headerIdx = null;
+
+    // guess the most likely header row: first row with >=2 non-empty cells
+    let guessIdx = 0;
+    for(let i=0;i<Math.min(rows.length,15);i++){
+      const nonEmpty = rows[i].filter(c=>String(c).trim()!=='').length;
+      if(nonEmpty>=2){ guessIdx = i; break; }
+    }
+    state.guessIdx = guessIdx;
+
+    buildRawTable(rows);
+    $('mapGridWrap').classList.add('hidden');
+    $('mapHint').classList.add('hidden');
+    $('runBtn').disabled = true;
+    $('headerInstructions').textContent = 'Click the row below that actually contains your column headers.';
+  }
+
+  function buildRawTable(rows){
+    const table = $('rawTable');
+    table.innerHTML = '';
+    const maxRows = Math.min(rows.length, 40);
+    const maxCols = Math.max(1, ...rows.slice(0,maxRows).map(r=>r.length));
+
+    for(let i=0;i<maxRows;i++){
+      const tr = document.createElement('tr');
+      tr.dataset.rowIdx = i;
+
+      const rownumTd = document.createElement('td');
+      rownumTd.className = 'rownum';
+      rownumTd.textContent = i+1;
+      tr.appendChild(rownumTd);
+
+      for(let c=0;c<maxCols;c++){
+        const td = document.createElement('td');
+        td.textContent = rows[i][c] ?? '';
+        tr.appendChild(td);
+      }
+      tr.addEventListener('click', ()=>selectHeaderRow(i));
+      table.appendChild(tr);
+    }
+  }
+
+  function selectHeaderRow(headerIdx){
+    state.headerIdx = headerIdx;
+    const rows = state.allRows;
+    state.headers = (rows[headerIdx] || []).map(h=>String(h).trim());
+    // Track each kept row's real 1-based Excel row number alongside it —
+    // needed so the surgical XML writeback can target the exact right
+    // row, even though blank rows get filtered out of state.rows here.
+    const withRowNums = rows.slice(headerIdx+1).map((r, idx)=>({r, origRow: headerIdx+1+idx+1}))
+      .filter(x=>x.r.some(c=>String(c).trim()!==''));
+    state.rows = withRowNums.map(x=>x.r);
+    state.origRowNums = withRowNums.map(x=>x.origRow);
+
+    // highlight chosen row
+    $('rawTable').querySelectorAll('tr').forEach(tr=>{
+      tr.classList.toggle('chosen-header', parseInt(tr.dataset.rowIdx)===headerIdx);
+    });
+
+    $('headerInstructions').textContent = `Row ${headerIdx+1} set as header — ${state.rows.length} data rows below it. Click a different row to change.`;
+    $('mapGridWrap').classList.remove('hidden');
+    $('mapHint').classList.remove('hidden');
+    $('roundTripWrap').classList.remove('hidden');
+    $('stopsWrap').classList.remove('hidden');
+    $('mismatchToggleWrap').classList.remove('hidden');
+    $('runBtn').disabled = false;
+    buildMappingUI();
+  }
+
+  function buildMappingUI(){
+    const selects = ['map-o-postal','map-o-city','map-o-state','map-o-country',
+                      'map-d-postal','map-d-city','map-d-state','map-d-country',
+                      'map-roundtrip'];
+    selects.forEach(id=>{
+      const sel = $(id);
+      sel.innerHTML = '<option value="-1">— none —</option>';
+      state.headers.forEach((h,idx)=>{
+        const opt = document.createElement('option');
+        opt.value = idx; opt.textContent = h || `(column ${idx+1})`;
+        sel.appendChild(opt);
+      });
+    });
+
+    // auto-detect common header names — match by keyword rather than exact
+    // string, so variants like "Origin 5Zip", "OrigZip", "Zip - Origin" all
+    // still get picked up instead of silently defaulting to "— none —".
+    function autoMatch(headers, sideWords, fieldWords){
+      let bestIdx = -1;
+      headers.forEach((h,idx)=>{
+        const low = String(h).toLowerCase().trim();
+        if(!low) return;
+        const hasField = fieldWords.some(w=>low.includes(w));
+        const hasSide = sideWords.some(w=>low.includes(w));
+        if(hasField && hasSide && bestIdx===-1) bestIdx = idx;
+      });
+      return bestIdx;
+    }
+    const ORIGIN_WORDS = ['origin','orig','ship from','from','pickup','shipper'];
+    const DEST_WORDS = ['destination','dest','ship to','to ','delivery','consignee'];
+    const guessMap = {
+      'map-o-postal': [ORIGIN_WORDS, ['zip','postal']],
+      'map-o-city':   [ORIGIN_WORDS, ['city']],
+      'map-o-state':  [ORIGIN_WORDS, ['state','province']],
+      'map-o-country':[ORIGIN_WORDS, ['country']],
+      'map-d-postal': [DEST_WORDS, ['zip','postal']],
+      'map-d-city':   [DEST_WORDS, ['city']],
+      'map-d-state':  [DEST_WORDS, ['state','province']],
+      'map-d-country':[DEST_WORDS, ['country']]
+    };
+    Object.keys(guessMap).forEach(id=>{
+      const [sideWords, fieldWords] = guessMap[id];
+      const idx = autoMatch(state.headers, sideWords, fieldWords);
+      if(idx>=0) $(id).value = idx;
+    });
+
+    // Round Trip / One Way column — matched separately since it's not an
+    // origin/destination field.
+    const rtIdx = state.headers.findIndex(h=>{
+      const low = String(h).toLowerCase().trim();
+      return low.includes('round trip') || (low.includes('round') && low.includes('one way'));
+    });
+    if(rtIdx>=0) $('map-roundtrip').value = rtIdx;
+
+    buildStopMapRows();
+    $('rowCountHint').textContent = `${state.rows.length} data rows found (header row ${state.headerIdx+1})`;
+  }
+
+  // Builds N "Stop k column" dropdowns based on the Number of stops
+  // selector, auto-guessing "Stop 1", "Stop 2", etc. by header name.
+  function buildStopMapRows(){
+    const n = parseInt($('numStops').value) || 0;
+    const wrap = $('stopMapRows');
+    wrap.innerHTML = '';
+    for(let i=1;i<=n;i++){
+      const row = document.createElement('div');
+      row.className = 'field-row';
+      const label = document.createElement('label');
+      label.textContent = `Stop ${i} column`;
+      const sel = document.createElement('select');
+      sel.id = `map-stop-${i}`;
+      sel.innerHTML = '<option value="-1">— none —</option>';
+      state.headers.forEach((h,idx)=>{
+        const opt = document.createElement('option');
+        opt.value = idx; opt.textContent = h || `(column ${idx+1})`;
+        sel.appendChild(opt);
+      });
+      // Auto-guess: header containing "stop" and this number.
+      const guessIdx = state.headers.findIndex(h=>{
+        const low = String(h).toLowerCase().replace(/\s+/g,'');
+        return low === `stop${i}` || low === `stop${i}.` || low.match(new RegExp(`^stop0*${i}$`));
+      });
+      if(guessIdx>=0) sel.value = guessIdx;
+      row.appendChild(label);
+      row.appendChild(sel);
+      wrap.appendChild(row);
+    }
+  }
+
+  $('numStops').addEventListener('change', buildStopMapRows);
+
+  $('backBtn').addEventListener('click', ()=>{
+    showStep('step-upload');
+    fileInput.value = '';
+  });
+
+  // ---------- STEP 2 -> 3: RUN ----------
+  $('runBtn').addEventListener('click', runCalculation);
+
+  function readMapping(){
+    const n = parseInt($('numStops').value) || 0;
+    const stopCols = [];
+    for(let i=1;i<=n;i++){
+      const el = $(`map-stop-${i}`);
+      if(el) stopCols.push(parseInt(el.value));
+    }
+    return {
+      oPostal: parseInt($('map-o-postal').value),
+      oCity: parseInt($('map-o-city').value),
+      oState: parseInt($('map-o-state').value),
+      oCountry: parseInt($('map-o-country').value),
+      dPostal: parseInt($('map-d-postal').value),
+      dCity: parseInt($('map-d-city').value),
+      dState: parseInt($('map-d-state').value),
+      dCountry: parseInt($('map-d-country').value),
+      roundTrip: parseInt($('map-roundtrip').value),
+      stopCols,
+    };
+  }
+
+  function logLine(msg, cls){
+    const div = document.createElement('div');
+    if(cls) div.className = cls;
+    div.textContent = msg;
+    $('log').appendChild(div);
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+
+  async function runCalculation(){
+    state.mapping = readMapping();
+    state.mismatchCheckEnabled = $('mismatchToggle').checked;
+    if(state.mapping.oPostal<0 && state.mapping.oCity<0){
+      alert('Map at least an origin postal code or an origin city before running.');
+      return;
+    }
+    if(state.mapping.dPostal<0 && state.mapping.dCity<0){
+      alert('Map at least a destination postal code or a destination city before running.');
+      return;
+    }
+    showStep('step-progress');
+    $('log').innerHTML = '';
+    let osrmCount=0, estCount=0, failCount=0;
+    const total = state.rows.length;
+    const results = [];
+
+    for(let i=0;i<total;i++){
+      const row = state.rows[i];
+      const originResult = await geocodeEndpoint(row, state.mapping, 'o');
+      const destResult = await geocodeEndpoint(row, state.mapping, 'd');
+
+      let miles = null, method = 'fail', suspect = false, mismatch = false, ambiguousState = false;
+      const ferryRisk = isFerryOnlyRow(row, state.mapping);
+
+      if(originResult.mismatchMiles){
+        mismatch = true;
+        logLine(`Row ${i+1}: origin postal code and city are ${Math.round(originResult.mismatchMiles)} mi apart — postal code and city don't match, double check.`, 'warn');
+      }
+      if(destResult.mismatchMiles){
+        mismatch = true;
+        logLine(`Row ${i+1}: destination postal code and city are ${Math.round(destResult.mismatchMiles)} mi apart — postal code and city don't match, double check.`, 'warn');
+      }
+      if(originResult.ambiguousState){
+        ambiguousState = true;
+        logLine(`Row ${i+1}: origin state code also matches a Mexican state, and no Country column was given — verify manually.`, 'warn');
+      }
+      if(destResult.ambiguousState){
+        ambiguousState = true;
+        logLine(`Row ${i+1}: destination state code also matches a Mexican state, and no Country column was given — verify manually.`, 'warn');
+      }
+
+      // Build the ordered waypoint chain: Origin -> Stop 1 -> Stop 2 ->
+      // ... -> Destination. Blank stop cells are skipped. If no stops are
+      // mapped, or none are filled in for this row, this is just the
+      // regular two-point Origin->Destination case as before.
+      const waypoints = [{label:'origin', loc: originResult.loc}];
+      let stopFailed = false;
+      if(state.mapping.stopCols && state.mapping.stopCols.length){
+        for(let s=0; s<state.mapping.stopCols.length; s++){
+          const col = state.mapping.stopCols[s];
+          if(col<0) continue;
+          const raw = row[col];
+          if(!String(raw||'').trim()) continue; // blank stop cell — skip
+          const stopResult = await geocodeStop(raw);
+          if(stopResult && stopResult.mismatchMiles){
+            mismatch = true;
+            logLine(`Row ${i+1}: Stop ${s+1} postal code and city are ${Math.round(stopResult.mismatchMiles)} mi apart — double check.`, 'warn');
+          }
+          if(stopResult && stopResult.ambiguousState){
+            ambiguousState = true;
+          }
+          if(!stopResult || !stopResult.loc){
+            stopFailed = true;
+            logLine(`Row ${i+1}: could not locate Stop ${s+1} ("${raw}")`, 'err');
+            break;
+          }
+          waypoints.push({label:`stop ${s+1}`, loc: stopResult.loc});
+        }
+      }
+      waypoints.push({label:'destination', loc: destResult.loc});
+
+      const hasStops = waypoints.length > 2;
+      const allResolved = !stopFailed && waypoints.every(w=>w.loc);
+
+      if(allResolved){
+        let totalMiles = 0;
+        let anyEstimate = false;
+        for(let k=0; k<waypoints.length-1; k++){
+          const a = waypoints[k].loc, b = waypoints[k+1].loc;
+          const straightLine = haversineMiles(a,b);
+          const road = await getOsrmMiles(a, b);
+          let legMiles;
+          if(road != null){
+            legMiles = road;
+            // A real truck route is rarely more than ~1.8x the straight-line
+            // distance. A bigger ratio usually means one end got geocoded to
+            // the wrong place (bad data in a free postal/city database) —
+            // flag it rather than silently trust it.
+            if(straightLine>15 && road > straightLine*1.8){
+              suspect = true;
+              logLine(`Row ${i+1}: ${waypoints[k].label}→${waypoints[k+1].label} leg looks unusually indirect (${Math.round(road)} mi road vs ${Math.round(straightLine)} mi straight-line) — verify manually.`, 'warn');
+            }
+            // A road route can never be shorter than the straight-line
+            // distance between the same two points — that's a hard
+            // physical impossibility, not just an unlikely routing choice.
+            if(road < straightLine*0.97){
+              suspect = true;
+              logLine(`Row ${i+1}: ${waypoints[k].label}→${waypoints[k+1].label} leg (${Math.round(road)} mi) is shorter than straight-line (${Math.round(straightLine)} mi) — not physically possible, verify manually.`, 'warn');
+            }
+          } else {
+            legMiles = straightLine * 1.20;
+            anyEstimate = true;
+          }
+          totalMiles += legMiles;
+        }
+        miles = totalMiles;
+        method = anyEstimate ? 'est' : 'osrm';
+        if(method==='osrm') osrmCount++; else estCount++;
+        if(ferryRisk){
+          logLine(`Row ${i+1}: involves Newfoundland or a BC island community — no road link to the mainland, this lane needs a ferry. Road-router mileage here is unreliable, verify manually.`, 'warn');
+        }
+      } else {
+        failCount++;
+        if(!stopFailed){
+          const missing = !originResult.loc ? 'origin' : 'destination';
+          logLine(`Row ${i+1}: could not locate ${missing} (${describeRow(row,state.mapping,missing)})`, 'err');
+        }
+      }
+
+      // Double the final mileage for lanes marked as a round trip — but
+      // not if a mapped stop chain already loops back close to the
+      // origin, since that chain is already the complete there-and-back
+      // trip and doubling it again would count the return leg twice.
+      let roundTrip = false;
+      if(miles!=null && state.mapping.roundTrip>=0){
+        const rtVal = String(row[state.mapping.roundTrip]||'').toLowerCase().trim();
+        const chainAlreadyLoops = hasStops && originResult.loc && destResult.loc && haversineMiles(originResult.loc, destResult.loc) < 5;
+        if(rtVal.includes('round') && !chainAlreadyLoops){
+          roundTrip = true;
+          miles = miles * 2;
+        }
+      }
+
+      results.push({row, miles: miles!=null ? Math.round(miles) : '', method, ferryRisk, suspect, mismatch, roundTrip, ambiguousState, hasStops});
+
+      $('stat-osrm').textContent = osrmCount;
+      $('stat-geo').textContent = estCount;
+      $('stat-fail').textContent = failCount;
+      $('progressBar').style.width = `${Math.round(((i+1)/total)*100)}%`;
+      $('progressLabel').textContent = `${i+1} / ${total} lanes`;
+    }
+
+    state.resultRows = results;
+    showStep('step-done');
+  }
+
+  function describeRow(row, m, which){
+    const p = which==='o' ? m.oPostal : m.dPostal;
+    const c = which==='o' ? m.oCity : m.dCity;
+    const s = which==='o' ? m.oState : m.dState;
+    const parts = [];
+    if(p>=0 && row[p]) parts.push(row[p]);
+    if(c>=0 && row[c]) parts.push(row[c]);
+    if(s>=0 && row[s]) parts.push(row[s]);
+    return parts.join(', ') || '(blank)';
+  }
+
+  // ---------- GEOCODING ----------
+  // Core resolver: takes a plain {postal, city, st, country} descriptor and
+  // returns {loc, mismatchMiles, ambiguousState}. Used for Origin,
+  // Destination, and any Stop column — same logic either way, since a
+  // stop is just another point that needs the same country-resolution and
+  // sanity-checking as an origin or destination.
+  async function resolveLocation(postal, city, st, country){
+    postal = normalizePostal(postal);
+    city = String(city||'').trim();
+    st = String(st||'').trim();
+    country = normalizeCountry(country);
+
+    // Resolve country once. State/province abbreviation can override the
+    // Country column — but only for the specific US<->Canada mislabeling
+    // we've actually seen in real files. Mexican freight files use wildly
+    // inconsistent 2-letter state codes that often coincidentally collide
+    // with real US/CA abbreviations (CO = Colorado vs Coahuila, ME = Maine
+    // vs Estado de México, NL = Newfoundland vs Nuevo León) — letting state
+    // override a Country column that already, correctly, says MEX would
+    // silently send the lookup to the wrong country. So: trust an explicit
+    // MX country label completely; only let state/postal shape override
+    // Country for US<->CA cases.
+    const stateCC = guessCountryFromState(st);
+    let postalCC = '';
+    if(postal) postalCC = isCanadianPostalShape(postal) ? 'CA' : '';
+    // When nothing above gives a signal at all (no country column, no
+    // recognized state/province, no distinctive postal shape), default to
+    // US rather than searching with no country context — most lanes are
+    // domestic, and Mexico is covered by the fallback retry below.
+    const resolvedCountry = (country==='MX') ? 'MX' : (postalCC || stateCC || country || 'US');
+
+    const result = await tryResolve(postal, city, st, resolvedCountry);
+
+    // A handful of 2-letter codes are real US states AND real Mexican
+    // state abbreviations (MI: Michigan/Michoacán, MO: Missouri/Morelos,
+    // CO: Colorado/Coahuila, ME: Maine/Estado de México, plus MX-only ones
+    // like SL, DG, VE, CU). Without a Country column, that's ambiguous in
+    // theory — but only worth flagging when there's actual evidence of a
+    // problem, not just because the letters happen to overlap. Romulus, MI
+    // is a perfectly real place; flagging every MI/MO row because the
+    // letters also mean Michoacán/Morelos would bury real errors in noise.
+    const stateIsAmbiguousMX = !country && MX_STATE_NAMES[st.toUpperCase().trim()];
+    if(stateIsAmbiguousMX && result.loc && city){
+      // Validate the city actually resolves somewhere believable under the
+      // guessed country — do this regardless of the mismatch-check toggle,
+      // since it only applies to this narrow, already-rare case.
+      const key = `city|${resolvedCountry}|${city}|${st}`;
+      let cityLoc;
+      if(key in state.geoCache) { cityLoc = state.geoCache[key]; }
+      else {
+        cityLoc = await lookupCity(city, st, resolvedCountry);
+        state.geoCache[key] = cityLoc;
+      }
+      if(!cityLoc || haversineMiles(result.loc, cityLoc) > 75){
+        // City didn't validate — genuine uncertainty. Try Mexico and see
+        // if that reading is at least self-consistent before flagging.
+        const mxResult = await tryResolve(postal, city, st, 'MX');
+        if(mxResult.loc) return {...mxResult, ambiguousState: true};
+        return {...result, ambiguousState: true};
+      }
+      // City checks out under the guessed country — real place, not an
+      // ambiguity issue. Don't flag it.
+      return result;
+    }
+
+    if(result.loc) return result;
+
+    // Last resort: if there was no explicit Country column to begin with
+    // (so we had to guess), and the state code also happens to be a
+    // recognized Mexican state abbreviation, retry assuming Mexico before
+    // giving up entirely.
+    if(stateIsAmbiguousMX){
+      const mxResult = await tryResolve(postal, city, st, 'MX');
+      if(mxResult.loc) return {...mxResult, ambiguousState: true};
+    }
+    return result;
+  }
+
+  // Core postal->city lookup cascade for a single resolved country guess.
+  async function tryResolve(postal, city, st, cc){
+    // Try postal code first.
+    let postalLoc = null;
+    if(postal){
+      const key = `postal|${cc}|${postal}`;
+      if(key in state.geoCache) { postalLoc = state.geoCache[key]; }
+      else {
+        postalLoc = await lookupPostal(postal, cc || guessCountryFromPostal(postal));
+        state.geoCache[key] = postalLoc;
+      }
+    }
+
+    // If postal succeeded and a city is also given, cross-check them —
+    // but only when the mismatch-check toggle is on, since this costs an
+    // extra lookup per row.
+    if(postalLoc && city && state.mismatchCheckEnabled){
+      const key = `city|${cc}|${city}|${st}`;
+      let cityLoc;
+      if(key in state.geoCache) { cityLoc = state.geoCache[key]; }
+      else {
+        cityLoc = await lookupCity(city, st, cc);
+        state.geoCache[key] = cityLoc;
+      }
+      if(cityLoc){
+        const gapMiles = haversineMiles(postalLoc, cityLoc);
+        if(gapMiles > 75) return {loc: postalLoc, mismatchMiles: gapMiles};
+      }
+      return {loc: postalLoc, mismatchMiles: null};
+    }
+    if(postalLoc) return {loc: postalLoc, mismatchMiles: null};
+
+    // Fallback: city + state only (no postal to cross-check against).
+    if(city){
+      const key = `city|${cc}|${city}|${st}`;
+      if(key in state.geoCache) return {loc: state.geoCache[key], mismatchMiles: null};
+      const loc = await lookupCity(city, st, cc);
+      state.geoCache[key] = loc;
+      return {loc, mismatchMiles: null};
+    }
+    return {loc: null, mismatchMiles: null};
+  }
+
+  // Thin wrapper for Origin/Destination — pulls the relevant fields out of
+  // the row using the column mapping, then defers to the shared resolver.
+  async function geocodeEndpoint(row, m, which){
+    const postalCol = which==='o' ? m.oPostal : m.dPostal;
+    const cityCol   = which==='o' ? m.oCity   : m.dCity;
+    const stateCol  = which==='o' ? m.oState  : m.dState;
+    const countryCol= which==='o' ? m.oCountry: m.dCountry;
+    return resolveLocation(
+      postalCol>=0 ? row[postalCol] : '',
+      cityCol>=0 ? row[cityCol] : '',
+      stateCol>=0 ? row[stateCol] : '',
+      countryCol>=0 ? row[countryCol] : ''
+    );
+  }
+
+  // Parses a combined "City, State, Zip, Country" stop cell (the format
+  // seen in Stop 1..11 columns, e.g. "COLUMBIA CITY, IN, 46725, USA") into
+  // the same {city, state, postal, country} shape resolveLocation expects.
+  // Handles a missing zip or country gracefully — whatever comma-separated
+  // parts are present get assigned city/state/postal/country in order.
+  function parseStopText(raw){
+    const s = String(raw||'').trim();
+    if(!s) return null;
+    const parts = s.split(',').map(p=>p.trim()).filter(p=>p!=='');
+    if(parts.length===0) return null;
+    const out = {city:'', state:'', postal:'', country:''};
+    if(parts.length>=4){ out.city=parts[0]; out.state=parts[1]; out.postal=parts[2]; out.country=parts[3]; }
+    else if(parts.length===3){ out.city=parts[0]; out.state=parts[1]; out.country=parts[2]; }
+    else if(parts.length===2){ out.city=parts[0]; out.state=parts[1]; }
+    else { out.city=parts[0]; }
+    return out;
+  }
+
+  async function geocodeStop(rawStopText){
+    const parsed = parseStopText(rawStopText);
+    if(!parsed) return null;
+    return resolveLocation(parsed.postal, parsed.city, parsed.state, parsed.country);
+  }
+
+  // Excel often stores US/MX ZIPs as numbers, dropping the leading zero
+  // (e.g. "07444" becomes 7444). Restore it before any lookup.
+  function normalizePostal(raw){
+    let p = String(raw||'').trim();
+    if(!p) return '';
+    // Canadian postal codes are never purely numeric — leave those alone
+    if(/^[A-Za-z]\d[A-Za-z]/.test(p)) return p;
+    const digitsOnly = p.replace(/[^\d]/g,'');
+    if(/^\d+$/.test(p) && digitsOnly.length>0 && digitsOnly.length<5){
+      return digitsOnly.padStart(5,'0');
+    }
+    return p;
+  }
+
+  // Files use all kinds of country labels (USA, US, United States, CAN,
+  // Canada, MEX, Mexico...) — normalize to the 2-letter code every lookup
+  // function actually expects. Without this, city/state fallback lookups
+  // were silently losing their country filter, which is a big deal for
+  // common place names (Florence, Zaragoza, Leon, etc. all exist in
+  // multiple countries).
+  function normalizeCountry(raw){
+    const c = String(raw||'').trim().toUpperCase();
+    if(!c) return '';
+    if(c==='CA' || c.includes('CAN')) return 'CA';
+    if(c==='MX' || c.includes('MEX')) return 'MX';
+    if(c==='US' || c.includes('USA') || c.includes('UNITED STATES')) return 'US';
+    return '';
+  }
+
+  // Canadian postal codes always start letter-digit-letter (e.g. "L5R").
+  // Check just that prefix rather than requiring the full 6-character
+  // pattern, so truncated or partial codes (missing the trailing digit,
+  // missing the space) still get recognized correctly.
+  function isCanadianPostalShape(postal){
+    const p = postal.replace(/\s/g,'').toUpperCase();
+    return /^[A-Z]\d[A-Z]/.test(p);
+  }
+
+  function guessCountryFromPostal(postal){
+    if(isCanadianPostalShape(postal)) return 'CA';
+    if(/^\d{5}(-\d{4})?$/.test(postal.replace(/\s/g,''))) return 'US';
+    return 'US';
+  }
+
+  function guessCountryFromState(st){
+    const CA_PROV = ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','YT','NU'];
+    const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
+      'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC',
+      'ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
+      'PR','GU','VI'];
+    const s = (st||'').toUpperCase().trim();
+    if(CA_PROV.includes(s)) return 'CA';
+    if(US_STATES.includes(s)) return 'US';
+    return ''; // genuinely unrecognized — no signal, don't guess
+  }
+
+  // Newfoundland has no bridge/tunnel to the mainland — any lane touching it
+  // requires a ferry, which the road router can't reliably account for.
+  // Vancouver Island / the BC Gulf Islands are the same situation, but since
+  // BC itself is mostly mainland, that one has to be checked by city name
+  // rather than by province, or every Vancouver/Surrey/Kelowna lane would
+  // get flagged too.
+  const BC_ISLAND_CITIES = [
+    'VICTORIA','NANAIMO','DUNCAN','COURTENAY','CAMPBELL RIVER','PARKSVILLE',
+    'PORT ALBERNI','COMOX','LADYSMITH','SIDNEY','SOOKE','TOFINO','UCLUELET',
+    'QUALICUM BEACH','SALT SPRING ISLAND','SAANICH','LANGFORD','COLWOOD',
+    'PORT HARDY','POWELL RIVER','GABRIOLA ISLAND'
+  ];
+
+  function isFerryOnlyRow(row, m){
+    const NL_LABELS = ['NL','NF','NEWFOUNDLAND'];
+    // "NL" is also Nuevo León in Mexico — only treat it as Newfoundland when
+    // the country isn't clearly Mexico (blank/unmapped country still allows
+    // the NL check, since most freight data using bare "NL" means Canada).
+    const checkState = (stateIdx, countryIdx)=>{
+      if(stateIdx<0) return false;
+      const st = String(row[stateIdx]||'').toUpperCase().trim();
+      if(!NL_LABELS.includes(st)) return false;
+      const country = countryIdx>=0 ? normalizeCountry(row[countryIdx]) : '';
+      return country !== 'MX';
+    };
+    if(checkState(m.oState, m.oCountry) || checkState(m.dState, m.dCountry)) return true;
+
+    const checkBCIsland = (stateIdx, cityIdx)=>{
+      if(stateIdx<0 || cityIdx<0) return false;
+      const st = String(row[stateIdx]||'').toUpperCase().trim();
+      if(st!=='BC' && st!=='BRITISH COLUMBIA') return false;
+      const city = String(row[cityIdx]||'').toUpperCase().trim();
+      return BC_ISLAND_CITIES.includes(city);
+    };
+    return checkBCIsland(m.oState, m.oCity) || checkBCIsland(m.dState, m.dCity);
+  }
+
+  // Zippopotam.us — free, no key. api.zippopotam.us/{country}/{postal}
+  let lastZipCall = 0;
+  async function lookupPostal(postal, countryCode){
+    const clean = postal.replace(/\s/g,'').toUpperCase();
+    // Note: no automatic cross-country fallback here. US and Mexico both
+    // use 5-digit postal codes, so retrying a failed US lookup against
+    // Mexico's database (or vice versa) can silently return a real,
+    // completely unrelated location hundreds of miles away with no error
+    // to show for it — worse than just failing and falling through to the
+    // city+state lookup, which is scoped to the correct country.
+    const loc = await fetchWithBackoff(
+      `https://api.zippopotam.us/${countryCode==='CA'?'ca':countryCode.toLowerCase()}/${countryCode==='CA'?clean.slice(0,3):clean.slice(0,5)}`,
+      {},
+      data => (data.places && data.places.length)
+        ? {lat: parseFloat(data.places[0].latitude), lon: parseFloat(data.places[0].longitude)}
+        : null,
+      ()=>throttle('zip', 250)
+    );
+    return loc;
+  }
+
+  // Mexican freight files often use non-standard 2-letter state codes that
+  // aren't real place names Nominatim can resolve (e.g. "CU" for Coahuila
+  // reads as the ISO country code for Cuba). Map the common ones to their
+  // actual state name so the geocoder has something real to match against.
+  // Different customer files use different conventions for the same
+  // state (e.g. both "CU" and "CO" have been seen for Coahuila) — keep
+  // every variant seen so far rather than picking just one.
+  const MX_STATE_NAMES = {
+    'AS':'Aguascalientes','BC':'Baja California','BS':'Baja California Sur',
+    'CM':'Campeche','CS':'Chiapas','CH':'Chihuahua','CI':'Chihuahua',
+    'CU':'Coahuila','CO':'Coahuila','CL':'Colima','DF':'Ciudad de Mexico','CX':'Ciudad de Mexico',
+    'DG':'Durango','GJ':'Guanajuato','GT':'Guanajuato','GR':'Guerrero',
+    'HG':'Hidalgo','JA':'Jalisco','MI':'Michoacan','MO':'Morelos',
+    'ME':'Estado de Mexico','NA':'Nayarit','NL':'Nuevo Leon','OA':'Oaxaca','PU':'Puebla',
+    'QT':'Queretaro','QR':'Quintana Roo','SL':'San Luis Potosi',
+    'SI':'Sinaloa','SO':'Sonora','TB':'Tabasco','TM':'Tamaulipas',
+    'TL':'Tlaxcala','VE':'Veracruz','YU':'Yucatan','ZA':'Zacatecas'
+  };
+
+  // Nominatim (OpenStreetMap) — free, rate-limited (~1/sec), used for city+state fallback
+  async function lookupCity(city, st, country){
+    const countryName = country==='CA' ? 'Canada' : country==='MX' ? 'Mexico' : country==='US' ? 'United States' : '';
+    let stateForQuery = st;
+    if(country==='MX'){
+      const full = MX_STATE_NAMES[String(st||'').toUpperCase().trim()];
+      if(full) stateForQuery = full;
+    }
+    const q = [city, stateForQuery, countryName].filter(Boolean).join(', ');
+    return fetchWithBackoff(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+      {headers:{'Accept-Language':'en'}},
+      data => (data && data.length) ? {lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon)} : null,
+      ()=>throttle('nominatim', 1100)
+    );
+  }
+
+  // Shared throttle: enforces a minimum gap between calls to the same API.
+  const lastCallAt = {};
+  async function throttle(key, minGapMs){
+    const now = Date.now();
+    const wait = Math.max(0, minGapMs - (now - (lastCallAt[key]||0)));
+    if(wait>0) await new Promise(r=>setTimeout(r, wait));
+    lastCallAt[key] = Date.now();
+  }
+
+  // Fetch with a couple of retries on failure/429 — free public APIs can
+  // throttle under sustained volume on a large file, and a single dropped
+  // call shouldn't silently turn into a "not found" row.
+  async function fetchWithBackoff(url, opts, parseFn, waitFn, attempt){
+    attempt = attempt || 1;
+    await waitFn();
+    try{
+      const res = await fetch(url, opts);
+      if(res.ok){
+        const data = await res.json();
+        return parseFn(data);
+      }
+      if((res.status===429 || res.status>=500) && attempt<3){
+        await new Promise(r=>setTimeout(r, 700*attempt));
+        return fetchWithBackoff(url, opts, parseFn, waitFn, attempt+1);
+      }
+    }catch(e){
+      if(attempt<3){
+        await new Promise(r=>setTimeout(r, 700*attempt));
+        return fetchWithBackoff(url, opts, parseFn, waitFn, attempt+1);
+      }
+    }
+    return null;
+  }
+
+  // ---------- ROUTING ----------
+  async function getOsrmMiles(a, b){
+    const key = `${a.lat.toFixed(4)},${a.lon.toFixed(4)}|${b.lat.toFixed(4)},${b.lon.toFixed(4)}`;
+    if(key in state.routeCache) return state.routeCache[key];
+    const url = `https://router.project-osrm.org/route/v1/driving/${a.lon},${a.lat};${b.lon},${b.lat}?overview=false`;
+    const miles = await fetchWithBackoff(
+      url, {},
+      data => (data.code==='Ok' && data.routes && data.routes.length) ? data.routes[0].distance/1609.344 : null,
+      ()=>throttle('osrm', 150)
+    );
+    state.routeCache[key] = miles;
+    return miles;
+  }
+
+  function haversineMiles(a, b){
+    const R = 3958.8; // miles
+    const dLat = toRad(b.lat-a.lat);
+    const dLon = toRad(b.lon-a.lon);
+    const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+    const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
+  }
+  function toRad(d){ return d*Math.PI/180; }
+
+  // ---------- DOWNLOAD ----------
+  $('downloadBtn').addEventListener('click', downloadResult);
+
+  // ---------- Surgical XML writeback (preserves other sheets, styles,
+  // fonts, formatting) — same technique as lane_rate_filler.html. Instead
+  // of rebuilding the workbook from scratch (which drops every sheet but
+  // the active one and discards all original formatting), this opens the
+  // .xlsx as a zip, edits only the exact cells that need new values in the
+  // one sheet being processed, and leaves everything else untouched.
+  function colLetter(idx){ return XLSX.utils.encode_col(idx); }
+
+  function colIndexFromRef(ref){
+    const m = ref.match(/^([A-Z]+)/);
+    let col = 0;
+    for(const ch of m[1]) col = col*26 + (ch.charCodeAt(0)-64);
+    return col-1;
+  }
+
+  async function getSheetXmlPath(zip, sheetName){
+    const wbXml = await zip.file('xl/workbook.xml').async('string');
+    const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const parser = new DOMParser();
+    const wbDoc = parser.parseFromString(wbXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    const sheetEls = Array.from(wbDoc.getElementsByTagName('sheet'));
+    const sheetEl = sheetEls.find(el => el.getAttribute('name') === sheetName);
+    if(!sheetEl) throw new Error('Sheet not found in workbook.xml: '+sheetName);
+    const rId = sheetEl.getAttribute('r:id') || sheetEl.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+
+    const relEls = Array.from(relsDoc.getElementsByTagName('Relationship'));
+    const relEl = relEls.find(el => el.getAttribute('Id') === rId);
+    if(!relEl) throw new Error('Relationship not found for '+rId);
+    let target = relEl.getAttribute('Target');
+    if(target.startsWith('/')) target = target.slice(1);
+    else target = 'xl/' + target;
+    return target;
+  }
+
+  function findOrCreateRow(sheetDataEl, rowNum1based){
+    const rows = Array.from(sheetDataEl.getElementsByTagName('row'));
+    let existing = rows.find(r => parseInt(r.getAttribute('r'),10) === rowNum1based);
+    if(existing) return existing;
+    const doc = sheetDataEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const newRow = doc.createElementNS(ns, 'row');
+    newRow.setAttribute('r', String(rowNum1based));
+    let inserted = false;
+    for(const r of rows){
+      if(parseInt(r.getAttribute('r'),10) > rowNum1based){
+        sheetDataEl.insertBefore(newRow, r);
+        inserted = true;
+        break;
+      }
+    }
+    if(!inserted) sheetDataEl.appendChild(newRow);
+    return newRow;
+  }
+
+  function findOrCreateCell(rowEl, cellRef, colIdx0based){
+    const cells = Array.from(rowEl.getElementsByTagName('c'));
+    let existing = cells.find(c => c.getAttribute('r') === cellRef);
+    if(existing) return existing;
+    const doc = rowEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const newCell = doc.createElementNS(ns, 'c');
+    newCell.setAttribute('r', cellRef);
+    let inserted = false;
+    for(const c of cells){
+      if(colIndexFromRef(c.getAttribute('r')) > colIdx0based){
+        rowEl.insertBefore(newCell, c);
+        inserted = true;
+        break;
+      }
+    }
+    if(!inserted) rowEl.appendChild(newCell);
+    return newCell;
+  }
+
+  function clearCellChildren(cellEl){
+    while(cellEl.firstChild) cellEl.removeChild(cellEl.firstChild);
+  }
+
+  function setCellNumber(cellEl, value){
+    cellEl.removeAttribute('t');
+    clearCellChildren(cellEl);
+    const doc = cellEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const v = doc.createElementNS(ns, 'v');
+    v.textContent = String(value);
+    cellEl.appendChild(v);
+  }
+
+  function setCellString(cellEl, value){
+    cellEl.setAttribute('t', 'inlineStr');
+    clearCellChildren(cellEl);
+    const doc = cellEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const is = doc.createElementNS(ns, 'is');
+    const t = doc.createElementNS(ns, 't');
+    t.textContent = String(value);
+    is.appendChild(t);
+    cellEl.appendChild(is);
+  }
+
+  async function downloadResult(){
+    try{
+      const zip = await JSZip.loadAsync(state.originalArrayBuffer);
+      const sheetPath = await getSheetXmlPath(zip, state.sheetName);
+      const xmlText = await zip.file(sheetPath).async('string');
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlText, 'application/xml');
+      const sheetDataEl = doc.getElementsByTagName('sheetData')[0];
+
+      const milesColIdx = state.headers.length;
+      const srcColIdx = state.headers.length + 1;
+      const headerRowNum = state.headerIdx + 1;
+
+      // Header labels for the two new columns.
+      const headerRowEl = findOrCreateRow(sheetDataEl, headerRowNum);
+      setCellString(findOrCreateCell(headerRowEl, colLetter(milesColIdx)+headerRowNum, milesColIdx), 'Miles');
+      setCellString(findOrCreateCell(headerRowEl, colLetter(srcColIdx)+headerRowNum, srcColIdx), 'Distance Source');
+
+      state.resultRows.forEach((r, i)=>{
+        const origRow = state.origRowNums[i];
+        const rowEl = findOrCreateRow(sheetDataEl, origRow);
+
+        let methodLabel = r.method==='osrm' ? 'Road route' : r.method==='est' ? 'Estimated' : 'Not found';
+        if(r.hasStops) methodLabel += ' (multi-stop chain)';
+        if(r.roundTrip) methodLabel += ' (round trip ×2)';
+        if(r.ferryRisk) methodLabel += ' — ferry involved, verify';
+        if(r.suspect) methodLabel += ' — unusually indirect, verify';
+        if(r.mismatch) methodLabel += ' — postal code and city don\'t match, double check';
+        if(r.ambiguousState) methodLabel += ' — state code also matches Mexico, no country given, verify';
+
+        const milesCell = findOrCreateCell(rowEl, colLetter(milesColIdx)+origRow, milesColIdx);
+        if(r.miles!=='' && r.miles!=null) setCellNumber(milesCell, r.miles);
+        else setCellString(milesCell, '');
+
+        const srcCell = findOrCreateCell(rowEl, colLetter(srcColIdx)+origRow, srcColIdx);
+        setCellString(srcCell, methodLabel);
+      });
+
+      const serializer = new XMLSerializer();
+      const newXml = serializer.serializeToString(doc);
+      zip.file(sheetPath, newXml);
+
+      const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const outName = 'lanes_with_miles.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = outName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch(err){
+      console.error(err);
+      alert('Something went wrong generating the file: ' + err.message);
+    }
+  }
+
+  $('restartBtn').addEventListener('click', ()=>{
+    showStep('step-upload');
+    fileInput.value = '';
+    state.geoCache = {};
+    state.routeCache = {};
+  });
+
+})();
+</script>
+</body>
+</html>
