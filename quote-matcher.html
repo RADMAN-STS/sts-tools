@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quote Matcher — Previous Rate Filler</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#0c1f47;
+    --paper:#f4f6fa;
+    --line:#d7dce6;
+    --navy:#0c1f47;
+    --navy-2:#152c5e;
+    --road:#b9781a;
+    --road-dim:#e8d3ac;
+    --go:#2f6f4f;
+    --panel:#ffffff;
+    --muted:#5c6478;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+    line-height:1.5;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px 80px;}
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:linear-gradient(135deg, var(--navy), var(--navy-2));
+    color:#fff;
+    padding:22px 30px;
+    margin:0 -24px 28px;
+    border-bottom:3px solid var(--road);
+    flex-wrap:wrap;
+    gap:14px;
+  }
+  .brand{display:flex; align-items:center; gap:16px;}
+  .brand img{height:38px; width:auto; display:block; background:#fff; border-radius:4px; padding:5px 8px;}
+  .brand-text h1{
+    font-size:22px;
+    margin:0;
+    font-weight:600;
+    letter-spacing:-0.01em;
+    color:#fff;
+  }
+  .brand-text .subtitle{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:11.5px;
+    color:#aebbdd;
+    letter-spacing:.03em;
+    margin-top:2px;
+  }
+  .tag{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:12px;
+    color:#c7d0e8;
+    letter-spacing:.02em;
+    text-align:right;
+  }
+  .step{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:22px 26px;
+    margin-bottom:18px;
+  }
+  .step h2{
+    font-size:15px;
+    margin:0 0 14px;
+    font-family:"SF Mono","Menlo",monospace;
+    font-weight:600;
+    color:var(--road);
+  }
+  .dropzone{
+    border:2px dashed var(--line);
+    border-radius:3px;
+    padding:36px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone.drag{border-color:var(--road); background:#fff8f5;}
+  .dropzone p{margin:6px 0; color:var(--muted); font-size:14px;}
+  .dropzone .big{font-size:17px; color:var(--ink);}
+  input[type=file]{display:none;}
+  input[type=text]{
+    font-family:inherit;
+    font-size:14px;
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    width:100%;
+  }
+  select, button{
+    font-family:inherit;
+    font-size:14px;
+  }
+  select{
+    padding:7px 10px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    background:#fff;
+    color:var(--ink);
+    min-width:220px;
+  }
+  button{
+    background:var(--ink);
+    color:#fff;
+    border:none;
+    padding:11px 22px;
+    border-radius:3px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button:hover{background:#000;}
+  button:disabled{background:#b8b2a4; cursor:not-allowed;}
+  button.secondary{
+    background:transparent;
+    color:var(--ink);
+    border:1px solid var(--ink);
+  }
+  button.secondary:hover{background:var(--ink); color:#fff;}
+  .map-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:22px;
+  }
+  @media (max-width:640px){.map-grid{grid-template-columns:1fr;}}
+  .col-group h3{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted);
+    margin:0 0 10px;
+    font-family:"SF Mono","Menlo",monospace;
+    font-weight:600;
+  }
+  .field-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+    gap:10px;
+  }
+  .field-row label{font-size:13px; color:var(--ink); flex-shrink:0;}
+  .hint{font-size:12px; color:var(--muted); margin-top:2px;}
+  .note-box{
+    margin-top:16px;
+    padding:12px 14px;
+    background:#fbfaf7;
+    border:1px solid var(--line);
+    border-radius:3px;
+    font-size:13px;
+    color:var(--muted);
+    line-height:1.55;
+  }
+  .actions{margin-top:22px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  table{width:100%; border-collapse:collapse; font-size:12px; margin-top:14px;}
+  th,td{padding:5px 8px; border-bottom:1px solid var(--line); text-align:left;}
+  th{font-family:"SF Mono","Menlo",monospace; font-weight:600; color:var(--muted); font-size:11px; text-transform:uppercase;}
+  .preview-wrap{max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:3px;}
+  #rawTable tr{cursor:pointer;}
+  #rawTable tr:hover td{background:#fff8f5;}
+  #rawTable tr.chosen-header td{background:var(--road); color:#fff; font-weight:600;}
+  #rawTable tr.chosen-header:hover td{background:var(--road);}
+  #rawTable td.rownum{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:10px;
+    color:var(--muted);
+    width:28px;
+    text-align:right;
+    padding-right:10px;
+    user-select:none;
+  }
+  #rawTable tr.chosen-header td.rownum{color:#fff;}
+  .badge{
+    display:inline-block;
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:11px;
+    padding:2px 7px;
+    border-radius:10px;
+    background:#eae6db;
+    color:var(--muted);
+    margin-left:8px;
+  }
+  .badge.match{background:#e3efe8; color:var(--go);}
+  .badge.multi{background:#f2e6dd; color:var(--road);}
+  .badge.none{background:#eee; color:#888;}
+  .hidden{display:none !important;}
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--muted);
+    margin-top:40px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+    font-family:"SF Mono","Menlo",monospace;
+  }
+  .stat-row{display:flex; gap:24px; margin-top:10px; flex-wrap:wrap;}
+  .stat{font-family:"SF Mono","Menlo",monospace; font-size:12px;}
+  .stat b{display:block; font-size:20px; font-family:inherit; color:var(--ink);}
+  .cust-list{max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:3px; margin-top:10px;}
+  .cust-opt{padding:8px 12px; font-size:13px; cursor:pointer; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center;}
+  .cust-opt:hover{background:#fff8f5;}
+  .cust-opt.sel{background:var(--road); color:#fff;}
+  .cust-opt .score{font-family:"SF Mono","Menlo",monospace; font-size:10px; color:var(--muted);}
+  .cust-opt.sel .score{color:#fff8f0;}
+  .step-num{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:20px; height:20px; border-radius:50%;
+    background:var(--road); color:#fff; font-size:11px; font-family:"SF Mono","Menlo",monospace;
+    margin-right:8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOoAAAA8CAYAAABo8yZ8AAAQAElEQVR4Aew8B4BVxbXn9v7a7tsCu7DA0gSx0ARBQRQERbEbRSWxJ9ZYYu+aolHz7RpbxBhDBEGxI72JCCLSywLLttffu73+uW9Z2FWq4P8a3917ZuaeNnPPzJn67uJQuAoWKFjgJ2+BgqP+5KuoUMCCBQAKjlpoBQUL/AwsUHDUn0ElFYpYsEDBUX+8NlDQXLDAIbNAwVEPmSkLigoW+PEs8H/iqCSMPI4lT7tdZM9+W2DO+oqlRk8kYPBZza81sjdNj70A4ISrCOrkCQCnDw3CKeFmWiEsWKBgAd8CP5Kj9ixHyjGAE4eI7CULabLDbN0WHiHI8DCS4l7QLesOB/jPWOrsiSRe+Y1llb2JYeXPEVjJqwQE5wTKuyQ57sR/MczRo5Cewl2wwC/eAofUURkY0o1hxjwPUHU1hZ9+NUuXzDV09hheiKwmwLo8I79UmpEnvgDw2VaCwE8iiGBXwJn3aJ57AiOwO00zdy/OKDdsq191oWcHPwS3fTeSHDH0F19LBQN81wK/uOdD5KjDSJIe+jDGRtYahksCcC+KoZJrAPilFpD3xjPxSx0gZnLc6IoWCzuOvhQjXScY5AYYSq7ItY3VAFMesIx3/oYc+Z+65c2wLGZQu5Jec0LSBes5asyTJAwY1CJfiAsW+CVZ4KAdNRQaFqJZZgFFcXeQrD4F4KPLAORUJpOcbViQ5ij+twG+ZAFFChs0TdoWDl2yDU2JH6UovFQ2aq7O5rZuBMy+mGGKJ0vi1TGGP/MUvwJYGq5gaJqvq0/OcSyx2rQi12PQaQFHnTkR4DDR5ylAwQK/FAsctKNaTuhj8EL9SVpaLKc/ObPZcJ8oroP/0fOyn2vWllVZde0iD5LvsKzzUiadehk56XqK0iJgzfzaMicdC3jjGNtuejEUwopx0N+nmJOudMH8VgpIp7Ekvyan64MdMG8RhMA3OBa4sEPFsSk+OKBfc16FsGCB/34LHJSjMkz/m2ydHRAQy5fmTPp0gJOHAJz/CMA57yJnfISicjEA7ySAKYNs+92zdf2dK1yYdp9lffKiqi7+YKd5nU8+dJx3rtxWO0/UzO0nWEa6yjSVdCadele35CtEBm5Dev4nrbzUx8aSPerqau8yFf4xkux37E4dhUTBAv/FFvhBjiqFj7qN444cXFbe5eay0sotimpMDNH8fwDYuYIg3U5RTEfLUt6xrA9fApjkNNtvf8IVCthfzwRYcjvAzI8Nu+5SmpQ/tt3kaTQZm+ZrMIxpa233wz+TduQSCko9H1eAggX+2y1wwI4qBo9+iOeiAzRt+QLTJGamc+k1OG4/ISvJIYEwvlTR15xjWROPAngfrVcP1nzzUqo97WTLiT1L4qFRIvOrK32NFDWur4fxj9k2dQUDA8f4uAIULPDfbIEDc1SiF5q+wp3JtPxH3yipZOY2xzGmKUrDxeAmj8umJvcDZy4aWY+uZrhjbgT86BsJYtA4nu9bDlDN+DI/BBx38e8sM3WdKLK3SfCrYs+iLmLZsMtxpZcQZNF0Bh/4lx+ityBTsMDPxQIH4KjVTDDcZVJVdXew1AVL/BfU9fe3WrJWS4Cj2vbsuT6OgJFje/UY8ZXreWmSxpZ7HntaeVnPOgDiZJ/+Q8GC2U+pVs01OWjqiQHNhsPtT8xq2FWUUGmZbvQWEsY8/kN1F+QKFvipWwDf3wLSYtd7FJWFhu3yU74My44Y3qP7Vdt69+76sgOZvOP6+F69j3rr2zU1j1n64ldtfelM1535m401mx9DtM8RHNSdzc6cDjBjrgO5TTV1qyI0SZdlVGNASXlnm6SKbwQYfu4Py6BDGIg+F+Nknydo7ug3uMDRTwNedRXLdu7ww/T9EKkuJSD0vgiEHpcA2+1igu0/AYgBlwDRfwKF0qx0+K+p0GG/BqrLFcB2P6FtDoWnH88C7XiAqj+zfJ/7UB4kgv+Xe78dtbyk2x24FwKB6fgSwBkXsmTl50312YpvVy7oDzB/a0vp05kGISiJxwCM3jXVdeffArA218JzsLEL294uL6OBF/X7wGpcnZaTvQFnVnWqPOrtNvnuV0aHn1hU1m9JIFTxOstFbqCp4HjP5H/HUeXPuQ73IPyfXfQRFFb8DwqKXgsHu7xOkOFX21V2e628XddXiyJVr2JO0SuMV/YKL1a/EC3u9PD/WbF+VhmhDvegy9tWB07xVzJ89FbbIu4liOpxB63+ByrYP0elhvStr0tDeVnVGlWl+0pc6UTb9iCbbTxOh1k1rfOuq1/7UCZXP7qsuGMTgZ/5DEGc9CuAIeHWPAefXrYlkax5LKc0AdDkWUZu4lrdSB/lOPQCNMW+fn/1s2zXzuVVh/1bs6GLRzqrVTtzm5xtHO+66l0CQ37mWDragd5fbQfJR1vbCcJ4xTGVV1Oxhr+zkjQVJzkLSBYMy/nKca3XbVN/wzSUybFEA+qQDjK//yZxot1pZR1OWBEqqfw3QFT8Qa9Gdbu482FnbOalyr8jeQxB/nYtb7EUiNSFQyWbCYdenUf+PwT7dFRBOOlIjm43XBTCoGrGcpbiXrVtG2R927k2moZ+t8y2vehuUbSvzcqx1UEx/Ftwwv+sqjwyScDw/C+Ovsv/Q59NU/ljtCgCNCX0adYRLtpa13AVi0dDAKdJzbi9h7pNnJeSU2GCtZtyqXXng7bszwCr3jTNrx6OZ+ee5MDG1/au4RBSzQ2r9MzCS11r+W/AXXZ5Nl17jQOOmUgnQLazfzf1+RN0bcHFtjrvLNCWP3kIc/7Zq2KCZcMbYubhliehuo/JP+iFGGncpg11VRjFBJG8h2DHvXFBvCF+WCxWf7gJq77dgfw/j/bpqGKg5FYCE2owgpgcCAjHFJcUbdeszDkAn0/aU2ll+bOnVf2dY0hHLSMIbFwuayarOhz1PsAgbk8yB45fmGxqqr/LVNQAF/jdQDEoPIV6vSmOy24CKNP3Rx+Fs4c7jge2Z20Gc/OKvclwUF3BQI9uIJaWfJ+vugKY6i4A/nrGp1ajaf/hnSHYMpM4hwDoNDQkHXEG2v3u5XPsEzyX5oMShdE0iEGkDlpfoRBIVT1A6lbcjK0qo/me40SxS0n+WWpfxAV6HsOJ/c6i6WPOpIQjj8zj2wT+zzC7dwKoYpvRKCa7nMDwfcYC6+Obsd8LqW796aD/iWLPMQzTG73zDg6pRxGwfZA+2DEaVXDAHn4ccEPOAKH/bvLfIedHQqcjpNDQ02l64FkU1esIH9UaqvJl7NoZYEBRM746yof9cvbsyAb7d0bLhBCG/IvhIzQfHX0UMH26A3QIN/OikC3txAR7jxQjR59LMF1GRyJ9KhB21831ruS5UpJgg0AQHEOLQw8Dplc1YsABUCjgqN0KIZTa8W4o1XIXHd0T7W+MpYMDzuGk3oMR+ns8PN+93c66QQyobIcBUX0acF0H5h/3I9iHox7boTjc/leybHyVaMqd39i46dJNm1ddQRA5cc+6j9tZWU3KW42m8/bUjFJ7RjyRQCJkVxQcsltwtRc4sXi1pthX2Y5bRHNMZSAUeomiYoftTyaOS6ymSBY4OjgQxIG/27PMYXQw1OkdQapcK7hl+aOpXbxHtD/8yOFf00z7DcCUX9qMxy4Qg+UbCZ29n6KG941Es1+WlnSaQ3FFk8sqj1yJ80MfQXzfq1CE23UzFJbJKeB4GMg5vU09UaH2vyap8tW8UPU7Uho2pHOPIasCYtUUWQ4cDswxYzt3GhG37PBCDAv8RxDbvVNWcuQyTDx+EnBHtG/JAKdLbmalHpvIYLcbgR16fHW34fHiSJ8ZnFgxraKy5yZc6NNmCUGLvXuKxSfMkIq7fmG5zH/CxVXTJSG6gUXO7evkoeRxkijaREmDLyOFgSd1P3xUnKIrZrNS+8nh4p7L6MjIf4HYp7kj8QV8oA7vK1SM+UAq6rvccEPvEkz0P1Kky/LiypOnok6oh8/iw1ZKnBAIVm2khdBNwI/oX1o9cCnJVE4jyeIrxFDVRlEsnxAKlWgEyfcKCGVfMXjJmqKirhchWYxgBzwfDh2+CYeij3EIvR0OdvlACnfexBQNaa5v6uhjBLHD1kikcizPhdMUw/cLBiPfClTperSZN5qQRpxKk9H6kvKutWgJ1wfpzN8s27MjLvR7ORLotooOd5mG4yX/dqB0fqji5HlkdPBxeaZ8cEQvFyv/QrM7vgfMcNSB9HuBE7p+EYoePbW0tN8iLnDsuwCdSvOsewnaNIDv8lEUcdLqtRt9NBoRXrRkM7euc3XFdIq1UKF99PehR8cjl7Bw3o4G20z3PFMKhJg6AHt9M+bQhDmYFdfs3NSS0tIzA4FAN1WXn0ikm0AIBP+2Pzm4hPoviWMSjmFCabTj01xo2L+ZUL/TAIaR35V3gQEPKHDs7/xDOFYkYgndtBwOGK4oL8dL5ThGCiCFo2eESoo/EAKBioySecvFsBoXp4Hlo7cDNfSG7+bR5lk3AHDMJigccIJoNRUDcFzGo9mIHx8ZCEZfamiMhwFoACqoACWUGyaWYPjQX2wMv89w4FnTIRVBjJ5NMIGdnQxO8oSL8SDyZVdUdzl6lgesYmjuO7wgpWXVADFU+iSIvc9rKZMkVr7sgXCCbdNzPYe8RzGMP1tgfujYrt8Do7KyOsMHgRdDv4uWt/tEVtO1lqU/bpnOLNejAAj+PJYr+keLPoAjevXseexCTSZGc0wwSeDY04YpPx8tK1MTaeW0SGm3aSAMLM3zcwJukDi4LN+bj7R/oTEhV4qBIOAULRuGNdd2sQbLdSnLBlXX7K/bt6tqSCQUv1yeIAWOsG2Yqin2PbpJ3Gua1HRVQ5J08GkyMHwU4HwS1enMZDIZszyX9lwnLcvyIkESVwGGp1HbIHkpAC6OAcWzeL48aLTG+dKJgAd/g7mY7Jjqc3om/TjH86sVnRocCnaYwUdPPCrPS4cxAziXEKJlJBN4t6xj54s103gnHUvNlmVXB1w4Hdn6mTzvXgJ8LzSgaOI4ikJGBjfq8x3es+cWQ1dBV2Z85j9/HzodkUg0LWUZ8RISxj3AEeeei8OZ19JY8PL67SvRptJC7fsyB4nRJ20jcIu0bK2dLqtvtassdzKZzPFA9eq/T83G6vWNdWvOZgnYasgG8Fz0HIbsMFWMiDOJwNA2a2oLtROXcIFiUPAdxS5J2wTHg+E2EwiGxm3PBozwKmQ9uXhb/aY+urL0goQaO9m0jRWmhZp8oPj03XUIzRpQyAKakuueAwZYjoUQu24KZ13HcUAM8uMCEbqDR+i/imdi1WDBcpCdf2xPbKlS4h/8wcx+dr+amfy7nJq42SVyEC7lLxLLDusF6GI5HCjWQyJ21bbGzS9vTK3ukstNPbuuYfMYXmQTupUFWuBRGQEofmBfx8MHBcMhVCb896B++qCZ+/y2THL+GAs2fw3oMlCbI1gSXByOSKUbnt++8es+oM28yUljJ+ay8WdIjgCHIkcxpYNORewQKqu6b/2mitbBeQAAEABJREFUrVRpNLK9qX7TcVp62rWuMevqjTXLTmtXVealcnJXOiLd7PO6tOniIgZskBgrhpguBGVfVNe4votJx/4n15A+IZ2JTTY1jbQta71hKadu2liDRuOGd3zZrFp3Ri7+2Tiw5z9oyp8+kE1PP1U3vM9zOR0ojhsPxrx1euqDE1U9MRsDhTfszCrNU09pqq8ZAPai+UCYLMF4qG5VQBXaXMN86CaX4IaIASmWiW8Y52Q//i24827KpLecgYO9OifrJNDUA+BftOOSPAkkR3XAWA9rqFs1FKx5l4BDjlKSdRPFQBj4QOlZQHdDZfYFdg/47tHNWIYVqg1dA44LYZRw+UXffPU1Xle37U/N1N2Fm7+Oyf8alTaWn1AUED4wHdkfg2q4gHqxDQvmAHTvzvPH38+yIx+RpFPuIMkTb6PxUX8Q2DG30/jQR4LS0NsBuhXvTvNecJ6qp7amEg1g8bmtmXTD7Z7nAe5FR+xFZhfJXjmrcdu6AenMlrtcV11NsxxqjOyQYLDD+0Adc3kzI+cRHIE7ngmoIWLNuJaQA8vDMBdwwMmWHheAoHDgRBpsMB8CdWl9nju3Yq2sZKbQLA9SIDoYINcxj99twAB4uOehDL9PdjAPw8EFDBobGy7V4rP+BcYCNPWZhdbmCGKzZOD7lovlY44TS88+3wO3czAcRA5vgiwr+Qbh4i4ougKSxMUNWX4QfBk/I+2LhQ1NdZMxkgQpGD7RR6GRSpNCQchms+jRvRSCp6D1Ikq2ukmOw3TbAReDel1X7gXYYDSTJzmul7ibZalGHL23hXEjofikdnQgerYQCEEyVvsoyDN3btLYmSUzGupqnwE0Q6Bo6YK8DofyNFlDnSQNTY31NzhN0yeio/tN0LhCAZhlAyiKqWXB9RxdSybjAJ9lAGqQLZC0sqoBhUjdwMMI5oTRrHDKeIqk3WAoBIGgNBygL4/oLoF7lmUboCqGCdmFSQBfN6JQGGGhIRkjMbAw20IYDCOCZ3o4D9lc7i1bWTID4ZpvY8Va13ZftC0MgqHoaOAGtUdCFk4xtKoqYKm5Z8Fa+WUz84cG4NZrHmqptkMgFN0TBXu88T1SEAFN5RyaLwEHmDKeKb6ZZIJo6qeiOTUi7vVeajVm31zkwAf/NmDqe8nkh34NA8dF5OKi0nt0XTdcF/uytKTij6IUHa/o2CJWCLcripTeDdAuvVfVuyG6TrqGZFB9YbSn5DJ/69y1MxRFOrdaJ+xGqA1qZSOYyx9OqcuHJnObruQlss5CLa59tz5PANsTOdNSy3INcDAbGJpuIwkcIEd1HNcFaPEp3cphtm0CjrlZy8qlWgvYoG/1MBcIkqbQkEW3prVJ6/6QKnq4KwLhMm1IgNuAYRgQOJP1DGoRtL7aDSsmi0f8uX3n7us0zZwNgL2FHOIWwyRA1zwQAyIF6DIND6PQ9BxNN5uAktvslLqasQUHCQJieRQCvSJgLl61vXbbk/7synGdqyo7VW2UOpz5KgT6DUCq8rcFDJgWjsrlJUBegc7N8ujmIDMvpcq5z42EBi6wnQihaGBcMYESeaBpa0kz064Qd6gvOVKCkkindhA+tQPFVjgYHgbXpNIMLczfxdmcct0UkAwJ4CKjhKNtjEWGjjoOpEGTO1b3+pZkxQ8CQfENisNPJGjcJWkiEgxyeX4HTRkYZA+GLsKR8+Zt1KwddbYWARiO2DAeFX9kVVGkuifNRQAwAh0HQpvLkq0VPBECyhUIYIqrAZMclhTQ5IoBimFQBwI7L4aw4yRJehiJdBMcvZOwmwQq1G6wO1BN9XKNqepAkUz/TFLtEwmVbbWso75n2B3s+4w0beH2bK7mSIA59yvK+5/Ytr1FUTV0NjV9ZjY3bUJt/TpU8X4PuU9VbRgUObaxvDSyDdKvISefZG6vq7uGoQP7taHURlFue8LNLHwxIyevpxkOtm+vE1DLHuTzYCQOJMWiM03AoNWF3AlIgiBwCjUUcHZQHMCQZXEcJ0Uh4BN24FGEGgRN06CqKnqwPBTs+XZxFwcKcMDb5AmY5eHgAUUQFGAk6iKg+SrtIwi4+CpqVLeSBC1SFPGwaWtn6qZ2Pc8FgMQFkBU3nydN0YC5DhAkkODpRLOC5pBkBQJD+XqAuyIXJH2sqxC3ZJTG34bCwrqmpiaQVXtCZVWPxWxRr/yvpFwbQ0Vh0fJBQG/uS7QFXUXDNysBJ4QxRzNFgqKA4ijQ/TVHW1ZwDcs0VAd0xQGG4DjCtwLBAk3QjiFnne+wA04A2LYKtosGWNjVL0rRgUPate82m6CFM+LxprmGq1yWzNSPysqJf1q2g2PoHTMYmbcHGvExTUedq0ej8mvYzjwcy2N5EQiCaEbpDkf77cBACx0LDZPN2J0hSTEGWjeDivwGLItlGd7TVQP3HBcsRd6hpJnd81QSwzDcAQwIug0JvnuhQn0XteuZhPC7FI+mgmD0LimvhGQihXbS7nN3cRx4Kp3+Ir+m8SVp2mYoRqP8tA+muWKlHx8okIS5vbFx+xstcoYlv4vjBDqmGeb7UQt6v2NH9xZQmKcVF4VQCzDz5aMIgVBR/ZFchGmtCMNwD/2RmF/daIrUTHNREyCQIxCeLLd1RgKngMCRm7k2AJKFPV2Y6WGeBZhnIA4Lwa7bRZXu0wjcwYBVdzYqCYpORJs3pwqCALX1W87SYx/fZSbenyLr2Y9N00azIRLtcEfBv2zbxDDCBJpmUBsQfdROsFEn4jcfx9Vdj0d55CmzbDc197mkUXOk52njpQBbX1dfDy5B3eyTKY5zPM0AXcNp9LyzTCidv4PB0OF+x6AlUk0Uja1jkH/EYw2AsWxFnqFVwLBiJ5ERAHcdxSiBzZ4jE6aaQY6KEwzNo/K2YvaTDoXjuAkCbwKQtuOjfMjlrCtr6+MQLoosIdn06ZCb8bKtzPlE05OrFNkCghAwVMM+K6AjOgIIAJLza/JcVDl5dD4wjRyynQFgaJgk8U2GlTAIQscZkeuWZ2gVICtXoPcDUWSRy7tbdE8jaQIjQhIPLMNgrVjBRH8ewuSnYziOUq2pbdN428ddTzyML8cpZinD2I84kHGzSvIi2/ZikjTsQNeQu5R+J+U4DoajVv4d9AE/EqS3gSC5adHolccJoYtuYukA0xDb+hRAbo/vl8+Eqe6yu0U8x+HjTTPDmVoSKNzJ71SrmllHUQJq6EV9ITpsZ8tGvfVpOGCl4KH2YZleXq9reR5yJs90XQbwZlyeAOAgmqmpIPAkqni5DW0Hy47IdsEzPQJ8J/VhBzofUYB5pK+5TaepqUp3gQ8ARXHAet7OaRnhuT0xDAcCZ8Bp7neAJEk0CpmgZDQQBTGvtSXgRRE5nAkYkJ6iEm3LWLtQM+vff1MzdbSOxaCstPwIX86xNJcRePRegepA5ckjfVwLMMWjTqEpdqD/LjyHL7Rqa74SKSfmuQbQrDihhc+Pw+ETg4FAaLxhymAa2VmwapJpIUflWNS5OYaNpjRty4OEXB1zcRwHF8NKeI8KIFT+LqvodLzr4aCZ5qrM1nk7h1pWlLqLwSAouu7BDk91Ac+xaFCyLKsSShdw0HIRJM7SFLiOB0DRZC73XjyZ3j4TPA3VpXcuoFlMC6sfByPhcyww0IwjtdnMBTfRJEbzAoPll86u75Y+VwvQgNFoQoN8lCBQ0ILeTYzvBpdHGWAfbZraWXLqlTsZLnm5nn1kYiAS/IPnhZu75DzXwQUUjqZJDrPHMuyvdk2eN0liQ6FAoGJaabTLjSWRsrdNrddUgKX+/BL2dBG4dENZeffVodLRU4AeeA/OD7srUnbOdJEN/NlQE6CpdROt5Ir8GtCyzC9tCwfLpruFmfaT6OIRF9JFIx4W+ODTJO4ix0HORNioNgEIBzmZayGch3b3Ubp1AVzbJQkXDD3tMbvZQd7FilbJnuU6to4aSbPeFppjU55jkWjNRtp6Gnb2/jg6/rIMw98QAcNmrqUjIw5DZRwXjZa8IWdkoNGZMeokXF+PbXmoI6CQkwYduTGWL7eP90FV4x7PBdEAwthQ1D5Niyf2bNfp3A9DlWdOIKOnDyVKxo0XBX6MreVg6+bNU3wZzNYpmnZQvhoEwmUfSRVjLoPIiEEQPvmK0qruE2OxOHRoXxL3zMQHqF6sVP2aR3BHBQOjxjGdxz0plIzow/n8vPAPzdZ7cpIHOW3bo75uCscIZH8A0sWAyfqotuB6aylCRFP7QBfXk15hI+PupkKnHhGLK7OQlwDDCaOIMtRZlI0+LNBu7P0YJl7k62NYcNM7NKH+c4mNpthSkOvBWPgbYnDUQ8AdVwkuqWWzMohcACgK9W6I33OzL/hVR5A86nyqXqXKxvanw8cdDqHj/5azzLMs3ALZyD0MMMk0XZ2yHQsnOQYcnELSrW5aAMtxEJio0bht6qAVVz6J58PdBAzBehXtKvO7nkrTtEYhfHWf4uLAJQDIWLvh/yEojqVJAl0/RLatzGgmHC77EDwmkIjLK7du3dYPYMagtjzffyIwT9Q1C3TdHsfQ0v0MST+YS8XG8KwLnp16xUprv22RMpMNz0Ui7DJFSYKSU052bWai55F3WGbuUU1pmG3n0Maumsr3xLou06aeQiNWGvXXOtaiIx+bOcbU0Bovux0zjHRbWp6hJVBwEstGHCsOYGWYFqwfu47OuiaajhnZAAe7Zg1mLvAeDtqHjpGBgEDfAbbxLUW6U7Rs/IOSsACppi0AuC3kdRg5xskl0JoSuoHYMr31KQh0mUMy/pqKg1Ux17Tc6kxKPjld2/iqSJNzMEt9Ix2r6xSJiJ+jExn/yyg0a3QIz7KAIvCYaZrf5FT1JZwiFuA0+cLWjWtC7crDibrN356nJRZuRzmAkV78pKvFHuQpAoxM5noPp792PWyBY+mnBdFw6zrpy/SGmWgzDIDETNqWGwDsTBF4MuHLt4awiP/HNeTZFpqpGKo6SlfUByjMaeeA+kRpVIBk3eYyliLft03zW5pir7V141+OmQMlGxMEVWu2raVPpTzjK01GG76OfoacSd1JAlUBWspmcBPqt6KVlJFq9rTcN+8qmfqrikKc49jOOY6Df4HR0goMo64rKZGQDdQH9Dr+9XwZTZX0PC1ga2mwTLXtUsx0cTWdABPVg2cYzeXIC30/wL+PasZ4jpPIpfQeJDs2v1lgO9awTTWrAa2hA80cBx+6WBbNBRzvYDVxInbqps3bsLSsvEeQ1GpwkUaG6YPCvd6muvw36WTDEMzTr8Ux7THXSf2VJFM3bdm69Cg1s+xSgNZf/CyLNcW+GUuT6QdKS6mpPOW9jhrsuGTtO7cq6VUP8KzyCMdps/wMadKcS5Dpe+NNq64BI7HNx7UAjRnzTG3b7bbZdAuAnm+0LbQ2sW7XZ2Jf30h5DfeRILfd6bRTs0i37j4lu/oGTXNRC26RnGWTxsbzCavhVsKKTQmL3puunLggU/fRebUbFv86yBsPg5NGm3cAtrP9A5lCxV4AABAASURBVFFSH6xZP+9KkPPnLi1KgCSd6bZae7eS+vYGALS5Z3z+niKvHS1K+kO2su1pAcs8JjjqOclN6ZP19JoaX5BB5xuuYYGtG3EKtOEMnv19VDLe5aFhUpDM3lW3ZlFvPfNFm08dbfnbezK1qwYLmPIX0o6/zVPKG67ReFfTlm+7ZmrnvOzr9cHUkjNoSrkvUbf6egNTv2ezVGpphnYbzrZzW64JcubfAoJ+v6ptXwPpOcvi2745JiTYT3lq3Ts8If9Nz20dYlny9TSo9zpy4jZcy9h+HqAt3O5lt48FK3kTTxtPRyLcgzaZWwekvFJJbbojwNt3W1oK9XR5btR3fvVCbOvXA1k88RCHZ9/CTeVtHtf/pCXW9jPrPr4XjaZoLYR48dxWTa67SeSch3ha3bkcQRQAM7FNTWy/SfDMu610YnEet4dgj46qQbYO9dwgiSX5HhPH6Q6+DsvSD5mjgkdGRD500GtenAyMsywDPM+YaLlWE5A0KrcYgn1fHtjL52vZuU9rufm3GMqSmzXl68fBqlm+W1Ht6+3Z+Mx7t62bNC4b+3CCmZuLpteAGufGz9XMyju13MZ8RZhm40pV3vCAYWx4BqBWa63LNDeutPVNf7IN/xvdOrU1rW16g2FoNU8iPfdr2uYv2tCsbUtUdd392fTKv/nTyNa0ZHJDVsksfzTWuOjMxrr54zVlxVs+3dK/eS2TWHQXWOubG4S9YZacXXaPpa55CWDHmaPPiMC26+aDvfEhQ1mB9COEf9sbP5KzS++W019cm0kuvkXOfPmf1nmriuyAbUFY4tnta6YkjPhXTzRumH2G3PjluZnYoodRHg2+mu+BtmGhEv/iD9n4kvNTTQsvljPLH9b1tZtb81nK+uWmuul+Q17/PxBb1eYoqYUvl1sXV+WvnkknP78hm5xzH+gr8jq0xIrF6bovrlMTy86WY4tvkJOLV4G8oElumv1ALrbgz7ncmkSLDlVdVpdLfvF4Krbw2mRy9j2Q+yIBxoaNrrnuj9n0rIcAVja28Poxst1SPbbobqVx5gVaatb5SmLe7Zn6xUt92k6QVzRpyUWPy8lZd6uZpV/txOcTNWmwlz0uZxcg3TVr8qg9BHt0VICp2xghvSEVl49ipd8OsUxaB5cBIRAu2oOuA0Kz5PHDMSvaQGERioaR+UP4HQpwgjh9DMCZ51Fw+kCA0cwO/G6j0tKLBJopGt+pewUkY3+aZJloa9ayIZeV9d0KFJA/igUYyvMwtPEl55Lmj5LBL0HpXt4R3wsNmhLrXqRoETA3cJ1rgkGhsy8la+XXYXuT2x+abs+evXbrE+Ub6wP9TPhkbbPMsKpQ8MKZaOk4TKDCNC+W3dSz+vAYQx13ZTP9+2EiYwxIpQyQ5dRonypJXCPOkEDgzg6dPrYAP7oFXJPzXBWCAbryR8/rF5jBXh01HBZeLCutQDMa/ByWoyoEkQFejDI8f1K7Q2ArfyWJ1Nznx/l1akAKPWk7Rtp237xVsV5+IyMnxxt2ahFOwjeIcbc3hgVOKSvv8rtY7Qsf+QwuOPFoUQjtsMl7lPH5CnBoLYARxoru3TvUyXJ80qHVXNDmWwD3gz1BKvVZpq5u+ziBZ8HxcoMVLf0iOqNM2E7wxj3JHAw+IBX1l6RQ2S4dk8xNNbVjNW1Ofu23C78rRTHS3FzOYDv2uuutQPTSk13T4ENB+kvQlrTZxNklUUj9GBZQ0iv/umzJmx2218ya8GPoPwCdRKhk8EWM1OPFULTvawFxyL2h0FEdD0D+J8m6V0fNl9iRcctKX8RJ2NuWqT6ZzGW3FBV3uJkJDKvO0w9hkE7mXskkzQEl0RvXsfxld5Dk+UMBKv0Rd7e5iKUjSwiGvFFRcn+tq5WLKyqr39a1TOWGdUvu361AAfljW6B5p/PHzmUv+ll+8IuOKf1Dkkr60TTXtbg0eofjeO33IrJbUlXVMJbhjr4hEOp3MfwErn06Ks0ZpOPER6frn3sIzLdX0xhkmuJos8oI33qoyy/r3n22l3lUDNJdXQceth1qTocqJsEIJ7T5pUtLvpRd+m6uKXm8GAq8ydJBct3qTQHLSH7pOPPeb+H5seOC/p+QBciOw12X+41l4nfG6+Yc3bR93rFNjTUVuRyxn79P70u1vE1Dg1seDnV/gsBLh7TgvhPj33lu/bg3Wmu+/U7vU6GmTZnUsWP4LFG6bDLAfbhpvrimqFiSWabicoBT80c2+53bPhknOaY59dZN9mIuEMn1DRVz19sWKwlsp49BHBptLR6Wxr+QTpKDxKKi+SSJPepZ3rCicARsu2lua75C+hdkAZuSbMcADzN37vjL8rIYFMusVHT0q3z4yDt3WoPrUxEoHv4uKx33G5Yd0pkPjnxZiARnkMG+k5nwsWMcSnzAwmgbmODJYum4T6jA0AG+LBUYdgMTHjlbjJw6V4qe8gcfB5GBAa70uIlM9LgxgjDi+tJ2p6+Qyke8wUWGVfCBwadIxSPmkpHhH5NFw/KfDfoylHD8RRg56H1OGPIZQA907upj9wz7dFRfdO3aLy7SZfUMSUohJ5jAJlPJR5WsvwsfusanHyooLj5WyuuqmaXH69/+Kh178X9UxTxeUTwAi0BHNXkqiOFTr0rlsleIIjtLxuSTc6nYADmLjsNc+YPWZ3vN3IXwl2MB+xMpxCxEm49/paQhLwulQ5odI742h2GhSoIsfgjCffODCyu2G6EY3OmmzYtMsPxlio0cppvkMxQlzXc8QqZZPo6WVa6DmTkbdzdiQiBHFo2+QwiU3WNo2Bs4E5wERPBPTOT0G8EOkQzf/kJRqnwOaG6QosMaBw+M97jQhyRXep1l82s4qcMw2wu9BMWnSYR08mms0O51iitfoCn06yxbUruvOtovRwVYOInA3WmmYgwWA8TntqrPjkRLobSs0xkAo9FIV73Xs859FaKF7jjRlyh+NBqpWzB+jG0tLosAzZs1/lOgePwp4WCXW4LFcEUu99xwiD0rFxeLvyVpFRobvn7O5ynAL9UCNXomtuVcDHOfKS+r+o2hsp+KJWP+CXAYbTjiExgRBIoUR/jW8TDuVCkc3kwI3rxAhB1m2upGRw5O0eKz/mqn58xR5ORjJsimSyc+0+unXW1aZoYVmDvTcu3joH/892z9m0+6uPdmIFJ6DVBiCU5TQHJ4Tkn1u0BOTj1b1b0Ztkf39gj3fj393uU5JXcHxYeqQGf6k0Skk0eQmOmqiwE+f0PXd/0Kyy/b7mA/HRXAcJRfsbTzjZxNDgpFix5PZ+Mv256rU1SkSyBwxJMQGBTZXQb7i+Ogf6XABwd1qOzyFzp49u1CyXkjCem80x3cfSYryzebqQX5T+A8N5LKqvTITHzaS77uQMWlkVym4chgwEYvXVib+jb5b4Ef9h4batX0zGu2btvQCSPwp3TD+RUd6vQHIzVtOhBeHU1yJ/mjmiAGRyqaNt2Kf/xVY2LLfbxIXFje3YvjxUfcnc+XczFeoFhNz+R9ROLofrpm8NGykiujPcZtCnUet1UMUBe6nh0GHIu64IGcS6M2mj9uBCko1BM0Aa4tb8zro6kNBMkCTUvFOEH+RzP0xVI4+JlQdPIskhswKM+zlyBfiL3QW5HeUzP6+sGCgL+tZLNHB4PMqESy4VPLCq5UFNbpFBm4GmBQ618YtZLdd1KDWIyktnRPZDYcRVByjYPJ/QMhqpcO2Qdz8ef/Giy5pAsfuvRBni17ELO5v3GBX//K14ob3mmS4IImbzrTfy5AwQJ5C+iLaqz0J9cFQvgmMeSe4+NMp/55iiJGgq6OJ0kyYKm5/H8rMZvm3K/mGgfnsrn3ear0ARCPuQottbRMOmnjIJi+rGvTpm0A6LI1MRmPX2daievSuc2nmlZ6LBh6g4f2u3ECJ31eH1SzicA8HRiJoP1nmiQpDFxwbJXREv/Y7hBwoprJXe5afEUk2PE/AIeHfb49wQE4qq9ilqwo75xvGbETNTN3D8tzTwE8K4si99cttbGSyo59l5Pk4AP4Fyi+zhao0WvQ2jTd8FGNFv/oLb1x+sOpbRMfQT64hgxe+aiqshtUmbpLle1+rkNkw+HyvzCB8dUCx1yqZBuHq+r8uhZNhfiXaQGeL24HUHISiNVRCFWFgOt2BoFD51w2NdO3iG7GJlMkyYiSeHMul5gFyqfNHwkUd5e05IKFcn38MlvHkxxfMgQo2WJIIkV5bG+QhhUrsv1lSVFZg225XZw4+ZG6be67xva503NbJ88H18x4NgYUjmN+Pj54lulRJAmsBvnLzCieY3jAErzrb8pCbJLs5D74u6YZD2qq0Y7imK55xj0EB+ioO7SQadAVFdczjfkvGTKZv28ORumrtm3ZwISKOs8WhNNHAZwYRNw7C47SB3TzxTeUk8Gb7qACXVK27N5cFC0HIPGHeZH7PS8x5+aULOYRBtcU3/x7Wf5o1gEpLzD/V1pANSJDS9r1/aRL5aCmzuVDUwGxy+RswvqM0qk/5V84ueHbdCw+WZOznV0j7n9Q4QE9qAdttPsI4OiXgab/Xd2pC6Vlcm9AcnE2nUpON01jZIfKiiY0HFY3bds2ISQWnRWpKK0hA6d+KkTO/Rbnz7wS5KCB22jgzI+9+ZyAIyTQMhakUhm0EwpAM5LnmBQoKVvlmC1oE3bMfJwd9SzDerfl5Nq3Le3Lth9eNKvZGeI7UweSsJfM4Dm5b4fqSiNQdMGDpHT60FT9qy8wXPG1ioyDIHT8iIDyEQJ94escNfoGhhnQbf/Vn8MJwoQyy6BOITy6PJWsv58W4TxHbpKKxeA/HEd5tqH2W8Iy6u4zU5O+sdSP9vOMbP9LUOD8mVrAIac31W0bvnHDqqu31qy9ScnGxhhZe7Sqzq1veSMcMC0aFlXDS6DjRoQ1zY2uJd/DMNhqCtPfX//t4v5gzPwYUdBENXsrjRmXNm5be4tlNWwH+7OPk7G1PUwl9jBuq7PAUv7CeOn3ASZlcolNZ2pK42O+nA9KuvFJFtfO1jQu/9WQqdTNB7N+HEBsHmE0vEXQ6nOuGd9kO/W/B/er832ZvQG+N+LeaGp22m+bahf9WUvbd9m5ojllJfetATcMFBG533KJGEGTPQ3ceR3nIk+QbOe1NHvqdCBGjAcYy7foZcVjh+PUsKsAH/kIy17wL46/7Iuy9t1jkWj3egojx4KX/tSWn73PzLz0b13HmKKwtDYX30rztPy6npv89xY9hbhggWYL+J/ArUQOtPR5W/viccf48kOAWXYzrS+Pzkuv4EjpSlVO/wVSq7Y245datr5khmEsfcwylj1vGF/u+pgj801KTS5+xcgt+WvLT1KN7OL1curz50z184eV3PTXNe3z/KzS0T6f4k+fm3WiUF2yRG76+J2d+SszGp3clKkAH8ZkBI45ayK4Sx9z1GWojIh/H/cPdlRfr64vuA0nU6MCQVjb0LS5u2HoTzE0f6/nYetNM8Xa+r9mKLp6GMdHvjRiA1PSAAACmElEQVSNyBgcKt8QhJLVQI3tn5eXbQsIql2kpOoMgio7T1MD/V1LFNJJdQtadbMk7l0H3Ij8jhhHO9PWrv8SXCf2umpOmeDLF6Bggf21AA7uVbpuvUBj3lvZpPLI/sr9VPgOylH9lzCMTz/JZl7pQRCbT+F58xldy85WsqmvOM570aeDOWV1vP7Z/gzNjBHZ6GsCW0aXBasmUtTwgQCL57n6p/ckG17siXlqaTQaKLdVpbeh66+YhtpBZMODwGoPBDHhVUmMDg4HxIsseK/gpHnDFoIDsUAoQC9gKfeKpqR0EcBS60Bkfwq8B+2oLS/hOHM+UNXXr8kpNZc7XqbeI+yraO7EvxSXnfcsL5z3KoGxY3EgXNuwvjZ0Q8Ywr7pF1o9l+fmmdLLpFIqFjy0zcT9NKz2S6S1/oFy8H1rIr924ZS6Vyv5jos9bgIIFDtQCyeziRbq15CW0nnQOVPanwH/IHHXXy7y/3rXr/427OnSr7n1jvEG92tb4CZbuXm0bxm9kuWmU48hoamx+2iwzJMxxF55XErlhneuof89ma9sHA8YC1Vw3wjL++bTlvvaUbr+Gdu1a1hrNUr/AsPDKv2AL/AiO6ltz4QZVnXHnym+epBiG7I5hmVNdqL1QtteOo+nGXlntn2iXa0ETwJHDBDb4qMThd5rW9jUe1N5lubVD0tk3jwV7QfMZl6+uAAUL/MIt8CM56i6rGsaUdYYzeboDU/8J8MFU2fxw1S7q8rmK3nB1U/KNPuncpNNc+Oxh2/607X/c28VcSBUs8Iu1wI/uqPuwLFov/PwW9vt4pwK5YIFDboH/b0c95C9UUFiwwA+wwE9epOCoP/kqKhSwYAGAgqMWWkHBAj8DCxQc9WdQSYUiFizwvwAAAP//F5OTzQAAAAZJREFUAwCqUwHD4TigrQAAAABJRU5ErkJggg==" alt="Sun Transportation Systems">
+      <div class="brand-text">
+        <h1>Quote Matcher</h1>
+        <div class="subtitle">Sun Transportation Systems — Pricing &amp; Data</div>
+      </div>
+    </div>
+    <div class="tag">previous rate finder<br>quote history → new RFP</div>
+  </header>
+
+  <!-- STEP 1: UPLOAD SOURCE (quote history) -->
+  <div class="step" id="step-upload-source">
+    <h2><span class="step-num">1</span>Upload your quote history file</h2>
+    <p class="hint" style="margin-bottom:14px;">This is the file with all your fleet's quotes — customer name, origin/destination, status, rate.</p>
+    <div class="dropzone" id="dropSource">
+      <p class="big">Drop the quote history file here, or click to browse</p>
+      <p>.xlsx — your "all quotes" export</p>
+    </div>
+    <input type="file" id="fileSource" accept=".xlsx,.xls">
+  </div>
+
+  <!-- STEP 2: MAP SOURCE -->
+  <div class="step hidden" id="step-map-source">
+    <h2><span class="step-num">2</span>Pick the sheet, header row, and columns — quote history</h2>
+    <div class="field-row">
+      <label>Sheet</label>
+      <select id="srcSheetSelect"></select>
+    </div>
+    <p class="hint" style="margin-bottom:8px;">Click the row that is the real header row (sometimes it's not row 1).</p>
+    <div class="preview-wrap"><table id="srcRawTable"></table></div>
+    <p class="hint" id="srcHeaderInstructions" style="margin-top:8px;"></p>
+
+    <div class="map-grid" style="margin-top:20px;">
+      <div class="col-group">
+        <h3>Required</h3>
+        <div class="field-row"><label>Customer Name</label><select id="src_customer"></select></div>
+        <div class="field-row"><label>Origin City</label><select id="src_oCity"></select></div>
+        <div class="field-row"><label>Origin State/Prov</label><select id="src_oState"></select></div>
+        <div class="field-row"><label>Destination City</label><select id="src_dCity"></select></div>
+        <div class="field-row"><label>Destination State/Prov</label><select id="src_dState"></select></div>
+        <div class="field-row"><label>Rate</label><select id="src_rate"></select></div>
+      </div>
+      <div class="col-group">
+        <h3>Optional (recommended)</h3>
+        <div class="field-row"><label>Status</label><select id="src_status"></select></div>
+        <div class="field-row"><label>Equipment</label><select id="src_equip"></select></div>
+        <div class="field-row"><label>Currency</label><select id="src_currency"></select></div>
+        <div class="field-row"><label>Quote #</label><select id="src_quote"></select></div>
+        <div class="field-row"><label>Effective Date</label><select id="src_effDate"></select></div>
+      </div>
+    </div>
+    <p class="hint">If "Status" is mapped, only rows marked ACTIVE are used. If "Effective Date" is mapped, the newest quote wins when a lane has more than one active quote.</p>
+    <div class="actions">
+      <button id="srcToRfpBtn">Next: upload the RFP →</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: UPLOAD RFP -->
+  <div class="step hidden" id="step-upload-rfp">
+    <h2><span class="step-num">3</span>Upload the new RFP / bid file</h2>
+    <p class="hint" style="margin-bottom:14px;">This is the incoming bid sheet with the lanes you need to quote.</p>
+    <div class="dropzone" id="dropRfp">
+      <p class="big">Drop the RFP file here, or click to browse</p>
+      <p>.xlsx — the bid sheet to fill in</p>
+    </div>
+    <input type="file" id="fileRfp" accept=".xlsx,.xls">
+  </div>
+
+  <!-- STEP 4: MAP RFP -->
+  <div class="step hidden" id="step-map-rfp">
+    <h2><span class="step-num">4</span>Pick the sheet, header row, and columns — RFP lanes</h2>
+    <div class="field-row">
+      <label>Sheet</label>
+      <select id="rfpSheetSelect"></select>
+    </div>
+    <p class="hint" style="margin-bottom:8px;">Click the row that is the real header row.</p>
+    <div class="preview-wrap"><table id="rfpRawTable"></table></div>
+    <p class="hint" id="rfpHeaderInstructions" style="margin-top:8px;"></p>
+
+    <div class="map-grid" style="margin-top:20px;">
+      <div class="col-group">
+        <h3>Required</h3>
+        <div class="field-row"><label>Origin City</label><select id="rfp_oCity"></select></div>
+        <div class="field-row"><label>Origin State/Prov</label><select id="rfp_oState"></select></div>
+        <div class="field-row"><label>Destination City</label><select id="rfp_dCity"></select></div>
+        <div class="field-row"><label>Destination State/Prov</label><select id="rfp_dState"></select></div>
+      </div>
+      <div class="col-group">
+        <h3>Optional (recommended)</h3>
+        <div class="field-row"><label>Equipment Type</label><select id="rfp_equip"></select></div>
+      </div>
+    </div>
+    <div class="note-box">If Equipment Type is mapped on both sides, matching groups equipment by its core type — Reefer, Dry Van/Closed Van/Container, Heated/Heater, Sprinter, Flatbed — ignoring size and axle prefixes, so "17 Sprinter" connects to "Sprinter" and "53 Heater" connects to "Heated". A Reefer lane only pulls a previous Reefer quote, a Dry Van lane only pulls a previous Dry Van quote, and so on. If no quote exists for the exact equipment type, the closest available quote on that lane is used instead and flagged "different equipment, verify." The equipment type in the RFP is left exactly as it was either way.</div>
+    <div class="actions">
+      <button id="rfpToCustBtn">Next: pick the customer →</button>
+    </div>
+  </div>
+
+  <!-- STEP 5: CUSTOMER -->
+  <div class="step hidden" id="step-customer">
+    <h2><span class="step-num">5</span>Confirm the customer</h2>
+    <p class="hint" style="margin-bottom:10px;">Only ACTIVE quotes for this customer will be used — a match on lane alone isn't enough, since the same origin/destination can belong to more than one customer in your quote history.</p>
+    <input type="text" id="custFilter" placeholder="Type to filter the customer list…">
+    <div class="cust-list" id="custList"></div>
+    <p class="hint" id="custGuessHint" style="margin-top:10px;"></p>
+    <div class="actions">
+      <button id="custToRunBtn" disabled>Next: match the lanes →</button>
+    </div>
+  </div>
+
+  <!-- STEP 6: RESULTS -->
+  <div class="step hidden" id="step-results">
+    <h2><span class="step-num">6</span>Results</h2>
+    <div class="stat-row" id="statRow"></div>
+    <div class="preview-wrap" style="margin-top:14px;"><table id="resultsTable"></table></div>
+    <div class="note-box">The downloaded file is identical to the RFP you uploaded — same sheets, same formatting, same every other column. Four columns are added to the end of the lane sheet: <b>Previous Quote #</b>, <b>Previous Rate</b>, <b>Previous Currency</b>, and <b>Previous Quote Note</b>.</div>
+    <div class="actions">
+      <button id="downloadBtn">Download filled RFP</button>
+      <button class="secondary" id="restartBtn">Start over</button>
+    </div>
+  </div>
+
+  <footer>Quote Matcher — built for Sun Transportation Systems · runs entirely in your browser, nothing is uploaded anywhere</footer>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  const state = {
+    source: {},
+    rfp: {},
+    custSelected: null,
+    results: []
+  };
+
+  // ---------------- generic helpers ----------------
+  function showStep(id){
+    ['step-upload-source','step-map-source','step-upload-rfp','step-map-rfp','step-customer','step-results']
+      .forEach(s => $(s).classList.toggle('hidden', s!==id));
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function setupDropzone(zoneId, inputId, onFile){
+    const zone = $(zoneId), input = $(inputId);
+    zone.addEventListener('click', ()=>input.click());
+    zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('drag'); });
+    zone.addEventListener('dragleave', ()=> zone.classList.remove('drag'));
+    zone.addEventListener('drop', e=>{
+      e.preventDefault(); zone.classList.remove('drag');
+      if(e.dataTransfer.files.length) onFile(e.dataTransfer.files[0]);
+    });
+    input.addEventListener('change', e=>{
+      if(e.target.files.length) onFile(e.target.files[0]);
+    });
+  }
+
+  function readWorkbook(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = e=>{
+        try{
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, {type:'array', cellDates:true});
+          resolve({wb, arrayBuffer: e.target.result, fileName: file.name});
+        } catch(err){ reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function sheetToRows(wb, sheetName){
+    const ws = wb.Sheets[sheetName];
+    return XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+  }
+
+  function levenshtein(a,b){
+    const m=a.length, n=b.length;
+    if(!m) return n; if(!n) return m;
+    const dp = new Array(n+1);
+    for(let j=0;j<=n;j++) dp[j]=j;
+    for(let i=1;i<=m;i++){
+      let prev = dp[0]; dp[0]=i;
+      for(let j=1;j<=n;j++){
+        const tmp = dp[j];
+        dp[j] = a[i-1]===b[j-1] ? prev : 1+Math.min(prev, dp[j], dp[j-1]);
+        prev = tmp;
+      }
+    }
+    return dp[n];
+  }
+  function wordTokens(s){
+    return String(s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().split(' ').filter(Boolean);
+  }
+
+  function guessHeaderIdx(headers, keywords, excludeKeywords){
+    excludeKeywords = excludeKeywords || [];
+    function isExcluded(h){
+      const low = String(h).toLowerCase();
+      return excludeKeywords.some(ex => low.includes(ex));
+    }
+
+    // Pass 1: exact substring match (fast, reliable for normal headers).
+    let best=-1, bestScore=-1;
+    headers.forEach((h,i)=>{
+      if(isExcluded(h)) return;
+      const low = String(h).toLowerCase();
+      let score = 0;
+      keywords.forEach(k=>{ if(low.includes(k)) score += k.length; });
+      if(score>bestScore){ bestScore=score; best=i; }
+    });
+    if(bestScore>0) return best;
+
+    // Pass 2: fuzzy fallback for typo'd headers ("orgin city", "des city")
+    // — tolerates a 1–2 character edit distance per word so a missing or
+    // swapped letter doesn't silently drop the column to the wrong guess.
+    best=-1; bestScore=-1;
+    headers.forEach((h,i)=>{
+      if(isExcluded(h)) return;
+      const hWords = wordTokens(h);
+      let score = 0;
+      keywords.forEach(k=>{
+        wordTokens(k).forEach(kw=>{
+          let bestDist = Infinity;
+          hWords.forEach(hw=>{ const d = levenshtein(hw,kw); if(d<bestDist) bestDist=d; });
+          const maxAllowed = kw.length<=4 ? 1 : 2;
+          if(bestDist<=maxAllowed) score += (kw.length - bestDist);
+        });
+      });
+      if(score>bestScore){ bestScore=score; best=i; }
+    });
+    return bestScore>0 ? best : -1;
+  }
+
+  function fillSelect(selectEl, headers, guessIdx, optional){
+    selectEl.innerHTML = '';
+    if(optional){
+      const opt = document.createElement('option');
+      opt.value = '-1'; opt.textContent = '— none —';
+      selectEl.appendChild(opt);
+    }
+    headers.forEach((h,i)=>{
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = `${XLSX.utils.encode_col(i)}: ${h || '(blank)'}`;
+      selectEl.appendChild(opt);
+    });
+    selectEl.value = String(guessIdx>=0 ? guessIdx : (optional ? -1 : 0));
+  }
+
+  // ---------------- raw preview / header row picker ----------------
+  function renderRawPreview(tableId, rows, onChoose, chosenIdx){
+    const table = $(tableId);
+    table.innerHTML = '';
+    const maxRows = Math.min(rows.length, 15);
+    const maxCols = Math.min(Math.max(...rows.slice(0,maxRows).map(r=>r.length)), 20);
+    for(let r=0; r<maxRows; r++){
+      const tr = document.createElement('tr');
+      tr.dataset.rowIdx = r;
+      if(r===chosenIdx) tr.classList.add('chosen-header');
+      const tdNum = document.createElement('td');
+      tdNum.className = 'rownum';
+      tdNum.textContent = r+1;
+      tr.appendChild(tdNum);
+      for(let c=0; c<maxCols; c++){
+        const td = document.createElement('td');
+        td.textContent = rows[r] && rows[r][c]!=null ? rows[r][c] : '';
+        tr.appendChild(td);
+      }
+      tr.addEventListener('click', ()=> onChoose(r));
+      table.appendChild(tr);
+    }
+  }
+
+  // ================= SOURCE FILE FLOW =================
+  setupDropzone('dropSource','fileSource', async(file)=>{
+    const {wb, arrayBuffer, fileName} = await readWorkbook(file);
+    state.source.wb = wb;
+    state.source.arrayBuffer = arrayBuffer;
+    state.source.fileName = fileName;
+    const sheetNames = wb.SheetNames;
+    const sel = $('srcSheetSelect');
+    sel.innerHTML = '';
+    sheetNames.forEach(n=>{
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    sel.value = sheetNames[0];
+    sel.onchange = ()=> loadSourceSheet(sel.value);
+    loadSourceSheet(sel.value);
+    showStep('step-map-source');
+  });
+
+  function loadSourceSheet(sheetName){
+    state.source.sheetName = sheetName;
+    const rows = sheetToRows(state.source.wb, sheetName);
+    state.source.allRows = rows;
+    selectSourceHeaderRow(0);
+  }
+
+  function selectSourceHeaderRow(headerIdx){
+    state.source.headerIdx = headerIdx;
+    const rows = state.source.allRows;
+    state.source.headers = (rows[headerIdx] || []).map(h=>String(h).trim());
+    state.source.dataRows = rows.slice(headerIdx+1).filter(r=>r.some(c=>c!==''&&c!=null));
+    state.source.origRowNums = rows.slice(headerIdx+1).map((r,idx)=>headerIdx+1+idx+1)
+      .filter((rn,idx)=> rows[headerIdx+1+idx].some(c=>c!==''&&c!=null));
+
+    renderRawPreview('srcRawTable', rows, selectSourceHeaderRow, headerIdx);
+    $('srcHeaderInstructions').textContent = `Row ${headerIdx+1} set as header — ${state.source.dataRows.length} data rows below it. Click a different row to change.`;
+
+    const h = state.source.headers;
+    fillSelect($('src_customer'), h, guessHeaderIdx(h,['customer']), false);
+    fillSelect($('src_status'), h, guessHeaderIdx(h,['status']), true);
+    const oCityIdx = guessHeaderIdx(h,['origin city','origin'], ['state','province','prov','postal','zip','code']);
+    fillSelect($('src_oCity'), h, oCityIdx, false);
+    fillSelect($('src_oState'), h, guessStateIdx(h, oCityIdx, ['province','state']), false);
+    const dCityIdx = guessHeaderIdx(h,['destination city','dest city','destination','dest'], ['state','province','prov','postal','zip','code']);
+    fillSelect($('src_dCity'), h, dCityIdx, false);
+    fillSelect($('src_dState'), h, guessStateIdx(h, dCityIdx, ['destination code','province','state','code']), false);
+    fillSelect($('src_rate'), h, guessHeaderIdx(h,['rate']), false);
+    fillSelect($('src_equip'), h, guessHeaderIdx(h,['equip']), true);
+    fillSelect($('src_currency'), h, guessHeaderIdx(h,['currency']), true);
+    fillSelect($('src_quote'), h, guessHeaderIdx(h,['quote']), true);
+    fillSelect($('src_effDate'), h, guessHeaderIdx(h,['effective date','effective']), true);
+  }
+
+  // Prefer a keyword match near the given city column; else fall back to the
+  // column right after it (common convention: City, then State/Province).
+  function guessStateIdx(headers, cityIdx, keywords){
+    const kw = guessHeaderIdx(headers, keywords);
+    if(kw>=0) return kw;
+    if(cityIdx>=0 && cityIdx+1<headers.length) return cityIdx+1;
+    return -1;
+  }
+
+  $('srcToRfpBtn').addEventListener('click', ()=>{
+    state.srcMap = {
+      customer: parseInt($('src_customer').value,10),
+      status: parseInt($('src_status').value,10),
+      oCity: parseInt($('src_oCity').value,10),
+      oState: parseInt($('src_oState').value,10),
+      dCity: parseInt($('src_dCity').value,10),
+      dState: parseInt($('src_dState').value,10),
+      rate: parseInt($('src_rate').value,10),
+      equip: parseInt($('src_equip').value,10),
+      currency: parseInt($('src_currency').value,10),
+      quote: parseInt($('src_quote').value,10),
+      effDate: parseInt($('src_effDate').value,10)
+    };
+    showStep('step-upload-rfp');
+  });
+
+  // ================= RFP FILE FLOW =================
+  setupDropzone('dropRfp','fileRfp', async(file)=>{
+    const {wb, arrayBuffer, fileName} = await readWorkbook(file);
+    state.rfp.wb = wb;
+    state.rfp.arrayBuffer = arrayBuffer;
+    state.rfp.fileName = fileName;
+    const sheetNames = wb.SheetNames;
+    const sel = $('rfpSheetSelect');
+    sel.innerHTML = '';
+    sheetNames.forEach(n=>{
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      sel.appendChild(opt);
+    });
+    // best guess: a sheet whose name contains "lane"
+    let guess = sheetNames.findIndex(n=>/lane/i.test(n));
+    if(guess<0) guess = 0;
+    sel.value = sheetNames[guess];
+    sel.onchange = ()=> loadRfpSheet(sel.value);
+    loadRfpSheet(sel.value);
+    showStep('step-map-rfp');
+  });
+
+  function loadRfpSheet(sheetName){
+    state.rfp.sheetName = sheetName;
+    const rows = sheetToRows(state.rfp.wb, sheetName);
+    state.rfp.allRows = rows;
+    selectRfpHeaderRow(0);
+  }
+
+  function selectRfpHeaderRow(headerIdx){
+    state.rfp.headerIdx = headerIdx;
+    const rows = state.rfp.allRows;
+    state.rfp.headers = (rows[headerIdx] || []).map(h=>String(h).trim());
+    state.rfp.dataRows = rows.slice(headerIdx+1).filter(r=>r.some(c=>c!==''&&c!=null));
+    state.rfp.origRowNums = rows.slice(headerIdx+1).map((r,idx)=>headerIdx+1+idx+1)
+      .filter((rn,idx)=> rows[headerIdx+1+idx].some(c=>c!==''&&c!=null));
+
+    renderRawPreview('rfpRawTable', rows, selectRfpHeaderRow, headerIdx);
+    $('rfpHeaderInstructions').textContent = `Row ${headerIdx+1} set as header — ${state.rfp.dataRows.length} data rows below it. Click a different row to change.`;
+
+    const h = state.rfp.headers;
+    const oCityIdx = guessHeaderIdx(h,['origin city','origin'], ['state','province','prov','postal','zip','code']);
+    fillSelect($('rfp_oCity'), h, oCityIdx, false);
+    fillSelect($('rfp_oState'), h, guessHeaderIdx(h,['origin province','origin state','origin prov']), false);
+    const dCityIdx = guessHeaderIdx(h,['dest city','destination city','dest'], ['state','province','prov','postal','zip','code']);
+    fillSelect($('rfp_dCity'), h, dCityIdx, false);
+    fillSelect($('rfp_dState'), h, guessHeaderIdx(h,['destination state','destination province','dest state','dest province','dest prov']), false);
+    fillSelect($('rfp_equip'), h, guessHeaderIdx(h,['equipment type','equipment']), true);
+  }
+
+  $('rfpToCustBtn').addEventListener('click', ()=>{
+    state.rfpMap = {
+      oCity: parseInt($('rfp_oCity').value,10),
+      oState: parseInt($('rfp_oState').value,10),
+      dCity: parseInt($('rfp_dCity').value,10),
+      dState: parseInt($('rfp_dState').value,10),
+      equip: parseInt($('rfp_equip').value,10)
+    };
+    buildCustomerStep();
+    showStep('step-customer');
+  });
+
+  // ================= CUSTOMER STEP =================
+  const STOPWORDS = new Set(['INC','LLC','LTD','CORP','CORPORATION','COMPANY','CO','AND','THE',
+    'RFP','BID','BIDS','SUN','TRANSPORTATION','TRANSPORTATIONSUTO','SUTO','SYSTEMS','SYSTEM',
+    'C','O','ATTN','PO','DEPT','LOGISTICS','ASSOCIATES']);
+
+  // Common shipper tickers/shorthand seen in RFP filenames that don't
+  // literally appear in the customer's full legal name.
+  const TOKEN_ALIASES = {'MDLZ':'MONDELEZ', 'KC':'KIMBERLY', 'JNJ':'JOHNSON', 'PG':'PROCTER'};
+
+  function tokenize(str){
+    // Filenames often run words together with no separator, in two shapes:
+    // camelCase ("MDLZCanada" -> "MDLZ Canada") and an acronym glued to the
+    // next capitalized word ("RFQRound3" -> "RFQ Round3"). Split both before
+    // normalizing, so each real word becomes its own token to match against.
+    const split = String(str)
+      .replace(/([a-z0-9])([A-Z])/g,'$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2');
+    return split.toUpperCase().replace(/[^A-Z0-9]+/g,' ').split(' ')
+      .filter(t=>t && !STOPWORDS.has(t) && !/^\d+$/.test(t))
+      .map(t=>TOKEN_ALIASES[t] || t);
+  }
+
+  function buildCustomerStep(){
+    const custIdx = state.srcMap.customer;
+    const names = new Set();
+    state.source.dataRows.forEach(r=>{
+      const v = r[custIdx];
+      if(v!=null && String(v).trim()!=='') names.add(String(v).trim());
+    });
+    const fileTokens = tokenize(state.rfp.fileName.replace(/\.[^.]+$/,''));
+
+    const scored = Array.from(names).map(name=>{
+      const nameTokens = tokenize(name);
+      let score = 0;
+      nameTokens.forEach(nt=>{
+        if(fileTokens.includes(nt)) score += nt.length;
+      });
+      return {name, score};
+    }).sort((a,b)=> b.score - a.score || a.name.localeCompare(b.name));
+
+    state.customerCandidates = scored;
+    renderCustomerList(scored);
+
+    const top = scored[0];
+    if(top && top.score>0){
+      selectCustomer(top.name);
+      $('custGuessHint').textContent = `Best guess based on the RFP filename: "${top.name}". Pick a different one below if that's wrong.`;
+    } else {
+      $('custGuessHint').textContent = `Couldn't guess the customer from the filename — pick one from the list below.`;
+    }
+  }
+
+  function renderCustomerList(list){
+    const box = $('custList');
+    box.innerHTML = '';
+    list.forEach(({name,score})=>{
+      const div = document.createElement('div');
+      div.className = 'cust-opt' + (state.custSelected===name ? ' sel' : '');
+      div.innerHTML = `<span>${name}</span><span class="score">${score>0?('match score '+score):''}</span>`;
+      div.addEventListener('click', ()=> selectCustomer(name));
+      box.appendChild(div);
+    });
+  }
+
+  function selectCustomer(name){
+    state.custSelected = name;
+    renderCustomerList(state.customerCandidates);
+    $('custToRunBtn').disabled = false;
+  }
+
+  $('custFilter').addEventListener('input', e=>{
+    const q = e.target.value.toUpperCase();
+    renderCustomerList(state.customerCandidates.filter(c=>c.name.toUpperCase().includes(q)));
+  });
+
+  $('custToRunBtn').addEventListener('click', ()=>{
+    runMatch();
+    showStep('step-results');
+  });
+
+  // ================= MATCHING =================
+  function normCity(v){
+    return String(v||'').trim().toUpperCase().replace(/\s+/g,' ').replace(/[.,]/g,'');
+  }
+  function normState(v){
+    return String(v||'').trim().toUpperCase();
+  }
+  function laneKey(city, st){
+    return normCity(city) + '|' + normState(st);
+  }
+
+  // Equipment is bucketed by its core type word, ignoring size/axle prefixes
+  // like "53", "17", "TANDEM", "FT" — so "17 SPRINTER" and "SPRINTER" are the
+  // same bucket and connect, same as "53 TANDEM REEFER" and "REEFER" do.
+  // Known families are checked first (reefer, sprinter, flatbed, heated,
+  // dry van/container); anything else falls back to its number-stripped
+  // text so two differently-worded "somethings" still bucket together if
+  // they reduce to the same core word.
+  function equipBucket(v){
+    const raw = String(v||'').toUpperCase().trim();
+    if(!raw) return 'UNSPEC';
+    if(raw.includes('REEFER') || raw.includes('REFRIGERATED')) return 'REEFER';
+    if(raw.includes('SPRINTER')) return 'SPRINTER';
+    if(raw.includes('FLATBED') || raw.includes('FLAT BED')) return 'FLATBED';
+    if(raw.includes('HEAT')) return 'HEATED';
+    if(raw.includes('DRY VAN') || raw.includes('DRYVAN') || raw.includes('VAN') || raw.includes('CONTAINER') || raw.includes('CLOSED')) return 'DV';
+    const core = raw.replace(/\b\d+'?\b/g,'').replace(/\bFT\b|\bFOOT\b|\bTANDEM\b/g,'').replace(/\s+/g,' ').trim();
+    return core || 'OTHER';
+  }
+
+  function runMatch(){
+    const sm = state.srcMap;
+    const activeOnly = sm.status>=0;
+    const cust = state.custSelected;
+    const checkEquip = sm.equip>=0 && state.rfpMap.equip>=0;
+
+    // filter + index source rows for this customer (and ACTIVE status if mapped)
+    const pool = state.source.dataRows.filter(r=>{
+      const c = String(r[sm.customer]||'').trim();
+      if(c !== cust) return false;
+      if(activeOnly){
+        const st = String(r[sm.status]||'').trim().toUpperCase();
+        if(!st.includes('ACTIVE')) return false;
+      }
+      return true;
+    });
+
+    const byLane = {}; // laneKey -> all active quotes on that lane (any equipment)
+    pool.forEach(r=>{
+      const key = laneKey(r[sm.oCity], r[sm.oState]) + '::' + laneKey(r[sm.dCity], r[sm.dState]);
+      (byLane[key] = byLane[key] || []).push(r);
+    });
+
+    function pickBest(matches){
+      if(matches.length===1) return {row: matches[0], multi:false};
+      let sorted = matches.slice();
+      if(sm.effDate>=0){
+        sorted.sort((a,b)=>{
+          const da = a[sm.effDate] instanceof Date ? a[sm.effDate] : new Date(a[sm.effDate]);
+          const db = b[sm.effDate] instanceof Date ? b[sm.effDate] : new Date(b[sm.effDate]);
+          const ta = isNaN(da) ? -Infinity : da.getTime();
+          const tb = isNaN(db) ? -Infinity : db.getTime();
+          return tb - ta;
+        });
+      } else if(sm.quote>=0){
+        sorted.sort((a,b)=> String(b[sm.quote]).localeCompare(String(a[sm.quote]), undefined, {numeric:true}));
+      }
+      return {row: sorted[0], multi:true, allSameRate: matches.every(m=>Number(m[sm.rate])===Number(sorted[0][sm.rate]))};
+    }
+
+    const rm = state.rfpMap;
+    const results = state.rfp.dataRows.map(r=>{
+      const key = laneKey(r[rm.oCity], r[rm.oState]) + '::' + laneKey(r[rm.dCity], r[rm.dState]);
+      const origin = `${r[rm.oCity]}, ${r[rm.oState]}`;
+      const dest = `${r[rm.dCity]}, ${r[rm.dState]}`;
+      const allOnLane = byLane[key];
+
+      if(!allOnLane || !allOnLane.length){
+        return {origin, dest, quoteNo:'', rate:'', currency:'', note:'No previous quote found for this customer.', status:'none'};
+      }
+
+      let matches = allOnLane;
+      let closest = false;
+      if(checkEquip){
+        const wantBucket = equipBucket(r[rm.equip]);
+        const sameBucket = allOnLane.filter(m => equipBucket(m[sm.equip]) === wantBucket);
+        if(sameBucket.length){
+          matches = sameBucket;
+        } else {
+          matches = allOnLane; // fall back to closest available on this lane
+          closest = true;
+        }
+      }
+
+      const {row, multi, allSameRate} = pickBest(matches);
+      let note;
+      if(closest){
+        note = 'No quote for this exact equipment on this lane — closest available quote used, verify.';
+      } else if(multi){
+        note = allSameRate
+          ? 'Multiple active quotes found for this lane/equipment (same rate) — used most recent.'
+          : 'Multiple active quotes found for this lane/equipment with different rates — used most recent, verify.';
+      } else {
+        note = 'Matched to active quote.';
+      }
+      return {
+        origin, dest,
+        quoteNo: sm.quote>=0 ? row[sm.quote] : '',
+        rate: row[sm.rate],
+        currency: sm.currency>=0 ? row[sm.currency] : '',
+        note,
+        status: closest ? 'multi' : (multi ? 'multi' : 'match')
+      };
+    });
+
+    state.results = results;
+    renderResults(results);
+  }
+
+  function renderResults(results){
+    const total = results.length;
+    const matched = results.filter(r=>r.status!=='none').length;
+    const multi = results.filter(r=>r.status==='multi').length;
+    $('statRow').innerHTML = `
+      <div class="stat"><b>${total}</b>RFP lanes</div>
+      <div class="stat"><b>${matched}</b>matched a previous quote</div>
+      <div class="stat"><b>${total-matched}</b>no previous quote</div>
+      <div class="stat"><b>${multi}</b>flagged — multiple quotes found</div>
+      <div class="stat"><b>${state.custSelected}</b>customer used</div>
+    `;
+
+    const table = $('resultsTable');
+    table.innerHTML = '<tr><th>Origin</th><th>Destination</th><th>Quote #</th><th>Rate</th><th>Currency</th><th>Note</th></tr>';
+    results.slice(0,300).forEach(r=>{
+      const tr = document.createElement('tr');
+      const badge = r.status==='match' ? '<span class="badge match">matched</span>'
+        : r.status==='multi' ? '<span class="badge multi">verify</span>'
+        : '<span class="badge none">none</span>';
+      tr.innerHTML = `<td>${r.origin}</td><td>${r.dest}</td><td>${r.quoteNo}</td><td>${r.rate}</td><td>${r.currency}</td><td>${r.note} ${badge}</td>`;
+      table.appendChild(tr);
+    });
+    if(results.length>300){
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="6" class="hint">…and ${results.length-300} more rows (all included in the download)</td>`;
+      table.appendChild(tr);
+    }
+  }
+
+  // ================= SURGICAL XLSX WRITEBACK =================
+  function colLetter(idx){ return XLSX.utils.encode_col(idx); }
+  function colIndexFromRef(ref){
+    const m = ref.match(/^([A-Z]+)/);
+    let col = 0;
+    for(const ch of m[1]) col = col*26 + (ch.charCodeAt(0)-64);
+    return col-1;
+  }
+
+  async function getSheetXmlPath(zip, sheetName){
+    const wbXml = await zip.file('xl/workbook.xml').async('string');
+    const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const parser = new DOMParser();
+    const wbDoc = parser.parseFromString(wbXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    const sheetEls = Array.from(wbDoc.getElementsByTagName('sheet'));
+    const sheetEl = sheetEls.find(el => el.getAttribute('name') === sheetName);
+    if(!sheetEl) throw new Error('Sheet not found in workbook.xml: '+sheetName);
+    const rId = sheetEl.getAttribute('r:id') || sheetEl.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+
+    const relEls = Array.from(relsDoc.getElementsByTagName('Relationship'));
+    const relEl = relEls.find(el => el.getAttribute('Id') === rId);
+    if(!relEl) throw new Error('Relationship not found for '+rId);
+    let target = relEl.getAttribute('Target');
+    if(target.startsWith('/')) target = target.slice(1);
+    else target = 'xl/' + target;
+    return target;
+  }
+
+  function findOrCreateRow(sheetDataEl, rowNum1based){
+    const rows = Array.from(sheetDataEl.getElementsByTagName('row'));
+    let existing = rows.find(r => parseInt(r.getAttribute('r'),10) === rowNum1based);
+    if(existing) return existing;
+    const doc = sheetDataEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const newRow = doc.createElementNS(ns, 'row');
+    newRow.setAttribute('r', String(rowNum1based));
+    let inserted = false;
+    for(const r of rows){
+      if(parseInt(r.getAttribute('r'),10) > rowNum1based){
+        sheetDataEl.insertBefore(newRow, r);
+        inserted = true;
+        break;
+      }
+    }
+    if(!inserted) sheetDataEl.appendChild(newRow);
+    return newRow;
+  }
+
+  function findOrCreateCell(rowEl, cellRef, colIdx0based){
+    const cells = Array.from(rowEl.getElementsByTagName('c'));
+    let existing = cells.find(c => c.getAttribute('r') === cellRef);
+    if(existing) return existing;
+    const doc = rowEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const newCell = doc.createElementNS(ns, 'c');
+    newCell.setAttribute('r', cellRef);
+    let inserted = false;
+    for(const c of cells){
+      if(colIndexFromRef(c.getAttribute('r')) > colIdx0based){
+        rowEl.insertBefore(newCell, c);
+        inserted = true;
+        break;
+      }
+    }
+    if(!inserted) rowEl.appendChild(newCell);
+    return newCell;
+  }
+
+  function clearCellChildren(cellEl){
+    while(cellEl.firstChild) cellEl.removeChild(cellEl.firstChild);
+  }
+  function setCellNumber(cellEl, value){
+    cellEl.removeAttribute('t');
+    clearCellChildren(cellEl);
+    const doc = cellEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const v = doc.createElementNS(ns, 'v');
+    v.textContent = String(value);
+    cellEl.appendChild(v);
+  }
+  function setCellString(cellEl, value){
+    cellEl.setAttribute('t', 'inlineStr');
+    clearCellChildren(cellEl);
+    const doc = cellEl.ownerDocument;
+    const ns = doc.documentElement.namespaceURI;
+    const is = doc.createElementNS(ns, 'is');
+    const t = doc.createElementNS(ns, 't');
+    t.textContent = String(value);
+    is.appendChild(t);
+    cellEl.appendChild(is);
+  }
+
+  $('downloadBtn').addEventListener('click', downloadResult);
+
+  async function downloadResult(){
+    try{
+      const zip = await JSZip.loadAsync(state.rfp.arrayBuffer);
+      const sheetPath = await getSheetXmlPath(zip, state.rfp.sheetName);
+      const xmlText = await zip.file(sheetPath).async('string');
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlText, 'application/xml');
+      const sheetDataEl = doc.getElementsByTagName('sheetData')[0];
+
+      const baseCol = state.rfp.headers.length;
+      const cols = {
+        quote: baseCol,
+        rate: baseCol+1,
+        currency: baseCol+2,
+        note: baseCol+3
+      };
+      const headerRowNum = state.rfp.headerIdx + 1;
+
+      const headerRowEl = findOrCreateRow(sheetDataEl, headerRowNum);
+      setCellString(findOrCreateCell(headerRowEl, colLetter(cols.quote)+headerRowNum, cols.quote), 'Previous Quote #');
+      setCellString(findOrCreateCell(headerRowEl, colLetter(cols.rate)+headerRowNum, cols.rate), 'Previous Rate');
+      setCellString(findOrCreateCell(headerRowEl, colLetter(cols.currency)+headerRowNum, cols.currency), 'Previous Currency');
+      setCellString(findOrCreateCell(headerRowEl, colLetter(cols.note)+headerRowNum, cols.note), 'Previous Quote Note');
+
+      state.results.forEach((r, i)=>{
+        const origRow = state.rfp.origRowNums[i];
+        const rowEl = findOrCreateRow(sheetDataEl, origRow);
+
+        const quoteCell = findOrCreateCell(rowEl, colLetter(cols.quote)+origRow, cols.quote);
+        if(r.quoteNo!=='' && r.quoteNo!=null) setCellString(quoteCell, r.quoteNo); else setCellString(quoteCell,'');
+
+        const rateCell = findOrCreateCell(rowEl, colLetter(cols.rate)+origRow, cols.rate);
+        if(r.rate!=='' && r.rate!=null && !isNaN(Number(r.rate))) setCellNumber(rateCell, Number(r.rate));
+        else setCellString(rateCell, '');
+
+        const curCell = findOrCreateCell(rowEl, colLetter(cols.currency)+origRow, cols.currency);
+        setCellString(curCell, r.currency!=null ? r.currency : '');
+
+        const noteCell = findOrCreateCell(rowEl, colLetter(cols.note)+origRow, cols.note);
+        setCellString(noteCell, r.note);
+      });
+
+      const serializer = new XMLSerializer();
+      const newXml = serializer.serializeToString(doc);
+      zip.file(sheetPath, newXml);
+
+      const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const outName = state.rfp.fileName.replace(/\.xlsx$/i,'') + '_with_previous_rates.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = outName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch(err){
+      console.error(err);
+      alert('Something went wrong generating the file: ' + err.message);
+    }
+  }
+
+  $('restartBtn').addEventListener('click', ()=>{
+    location.reload();
+  });
+
+})();
+</script>
+</body>
+</html>
